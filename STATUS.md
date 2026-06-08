@@ -16,17 +16,21 @@
 - [x] P00.12 — `hello.ae` End-to-End 🟢
 - [x] P00.13 — Phase 0 Verification & Cleanup 🟢
 
-## Phase 1 — Core Language (Minimum Viable Compiler) 🔴 NOT STARTED
-- [ ] Variables (`let`, `let mut`), immutability by default
-- [ ] Functions (`func`), parameters, return values, multiple returns
-- [ ] Control flow: `if`/`elif`/`else`, `while`, `for` loops, ranges
-- [ ] Primitive types: `u8`–`u64`, `i8`–`i64`, `f32`, `f64`, `bool`, `byte`
-- [ ] Structs and tuples
-- [ ] Basic inline NASM assembly (`asm { ... }`)
-- [ ] ELF64 output writer: `.text`, `.rodata`, `.data`, `.bss` sections
-- [ ] Fixed-address loading (no relocations, no dynamic sections)
-- [ ] `aether build --target x86_64-freestanding --output kernel.elf`
-- [ ] Compile and run `hello.ae` on Aether OS or QEMU
+## Phase 1 — Core Language (Minimum Viable Compiler) 🔵 IN PROGRESS
+- [ ] P01.01 — Codegen: Proper Variable Stack Slots
+- [ ] P01.02 — Codegen: Full Type Support
+- [ ] P01.03 — Codegen: Structs and Field Access
+- [ ] P01.04 — Codegen: Arrays and Indexing
+- [ ] P01.05 — Codegen: String Literals
+- [ ] P01.06 — Codegen: Inline NASM
+- [ ] P01.07 — Codegen: Function Calls with Arguments
+- [ ] P01.08 — Codegen: For Loops and Ranges
+- [ ] P01.09 — Codegen: Match Statements
+- [ ] P01.10 — Codegen: Enums with Payloads
+- [ ] P01.11 — Full Expression Coverage
+- [ ] P01.12 — Error Handling in Codegen
+- [ ] P01.13 — Self-Host Test Suite Expansion
+- [ ] P01.14 — Phase 1 Verification & Cleanup
 
 ## Phase 2 — Memory Management 🔴 NOT STARTED
 - [ ] Stack allocation for all local variables (default)
