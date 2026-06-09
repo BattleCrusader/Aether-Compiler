@@ -28,7 +28,7 @@
 - [x] P01.09 — Codegen: Match Statements 🟢
 - [x] P01.10 — Codegen: Enums with Payloads 🟢
 - [x] P01.11 — Full Expression Coverage 🟢
-- [ ] P01.12 — Error Handling in Codegen
+- [x] P01.12 — Error Handling in Codegen 🟢
 - [ ] P01.13 — Self-Host Test Suite Expansion
 - [ ] P01.14 — Phase 1 Verification & Cleanup
 
