@@ -543,21 +543,15 @@ AstNode *parse_statement(Parser *p) {
     /* asm block */
     if (parser_match(p, TOKEN_KW_ASM)) {
         if (parser_match(p, TOKEN_LBRACE)) {
-            /* Read raw text until matching '}' */
-            /* For now, just parse tokens inside */
-            AstNode *block = node_create(p->arena, NODE_ASM_BLOCK, p->previous.loc);
-
-            /* Collect the raw text inside asm block */
-            /* We need to handle indentation of asm content */
-            while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
-                /* Skip newlines, collect individual tokens */
+            /* Skip tokens until matching } counting brace depth */
+            int brace_depth = 1;
+            while (brace_depth > 0 && !parser_check(p, TOKEN_EOF)) {
                 parser_advance(p);
+                if (p->previous.type == TOKEN_LBRACE) brace_depth++;
+                if (p->previous.type == TOKEN_RBRACE) brace_depth--;
             }
-            parser_expect(p, TOKEN_RBRACE, "asm block");
-
-            return block;
+            return node_create(p->arena, NODE_ASM_BLOCK, p->previous.loc);
         } else {
-            /* `asm` without braces — single instruction */
             parser_error(p, p->current, "asm block requires { }");
             return NULL;
         }
@@ -794,6 +788,8 @@ typedef AstNode *(*InfixParselet)(Parser *p, AstNode *left);
 /* Precedence of a token (returns PREC_MIN if not an operator) */
 static Precedence token_precedence(TokenType type) {
     switch (type) {
+        case TOKEN_LPAREN: case TOKEN_LBRACKET: case TOKEN_DOT:
+            return PREC_CALL;
         case TOKEN_EQ: case TOKEN_PLUS_EQ: case TOKEN_MINUS_EQ:
         case TOKEN_STAR_EQ: case TOKEN_SLASH_EQ:
             return PREC_ASSIGNMENT;

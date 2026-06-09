@@ -522,11 +522,25 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_comment(cg, "function call");
             int argc = node->data.call.args.count;
 
-            /* Push args in reverse order (rightmost first) for stack-based */
+            /* SysV AMD64 ABI: first 6 integer args in rdi, rsi, rdx, rcx, r8, r9
+               For ≤6 args (Phase 1): evaluate right-to-left, push all, pop into regs */
+            const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+            int reg_count = argc < 6 ? argc : 6;
+
+            /* Evaluate args right-to-left, push each onto stack */
             for (int i = argc - 1; i >= 0; i--) {
                 cg_expr(cg, node->data.call.args.items[i], slots);
                 cg_inst1(cg, "push", "rax");
             }
+
+            /* Pop into target registers rdi, rsi, rdx, rcx, r8, r9 */
+            for (int i = 0; i < reg_count; i++) {
+                cg_inst1(cg, "pop", regs[i]);
+            }
+
+            /* Extra stack args (>6) stay on stack — callee finds them at rsp+N */
+            /* After call, count of remaining items = argc - reg_count, but if that's ≤0 it's fine */
+            int stack_cleanup = argc > 6 ? argc - 6 : 0;
 
             if (node->data.call.callee->type == NODE_IDENT) {
                 char buf[256];
@@ -536,10 +550,10 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 cg_inst1(cg, "call", buf);
             }
 
-            /* Clean up args from stack */
-            if (argc > 0) {
+            /* Clean up remaining stack args after call */
+            if (stack_cleanup > 0) {
                 char buf[32];
-                snprintf(buf, sizeof(buf), "add rsp, %d", argc * 8);
+                snprintf(buf, sizeof(buf), "add rsp, %d", stack_cleanup * 8);
                 cg_inst(cg, buf);
             }
             break;

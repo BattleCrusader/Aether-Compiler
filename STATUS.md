@@ -22,8 +22,8 @@
 - [x] P01.03 — Codegen: Structs and Field Access 🟢
 - [ ] P01.04 — Codegen: Arrays and Indexing
 - [x] P01.05 — Codegen: String Literals 🟢
-- [ ] P01.06 — Codegen: Inline NASM
-- [ ] P01.07 — Codegen: Function Calls with Arguments
+- [x] P01.06 — Codegen: Inline NASM 🟢
+- [x] P01.07 — Codegen: Function Calls with SysV ABI 🟢
 - [ ] P01.08 — Codegen: For Loops and Ranges
 - [ ] P01.09 — Codegen: Match Statements
 - [ ] P01.10 — Codegen: Enums with Payloads
