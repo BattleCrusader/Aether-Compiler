@@ -263,6 +263,21 @@ static void cg_comment(Codegen *cg, const char *s) {
     cg_write_fmt(cg, "; %s\n", s);
 }
 
+/* Report a codegen error with source location */
+static void cg_error(Codegen *cg, AstNode *node, const char *msg) {
+    fprintf(stderr, "Codegen error at %s:%d:%d: %s\n",
+        node->loc.file ? node->loc.file : "?",
+        node->loc.line, node->loc.col, msg);
+    (void)cg; /* keep compiling, emit zero */
+}
+
+/* Report a codegen warning (non-fatal) */
+static void cg_warn(Codegen *cg, AstNode *node, const char *msg) {
+    fprintf(stderr, "Codegen warning at %s:%d:%d: %s\n",
+        node->loc.file ? node->loc.file : "?",
+        node->loc.line, node->loc.col, msg);
+}
+
 /* Emit load from stack slot with correct register width */
 static void cg_load_var(Codegen *cg, int offset, int actual_size) {
     char buf[64];
@@ -539,13 +554,13 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_SLICE: {
-            cg_comment(cg, "slice (NYI - returns 0)");
+            cg_warn(cg, node, "slice not yet implemented");
             cg_inst1(cg, "xor", "rax, rax");
             break;
         }
 
         case NODE_ARRAY_LIT: {
-            cg_comment(cg, "array literal (NYI - returns 0)");
+            cg_warn(cg, node, "array literal not yet implemented");
             cg_inst1(cg, "xor", "rax, rax");
             break;
         }
@@ -663,6 +678,8 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
 
         default:
+            if (node->type != NODE_LITERAL_FLOAT && node->type != NODE_MATCH_ARM)
+                cg_warn(cg, node, "unsupported expression in codegen");
             cg_inst1(cg, "mov", "rax, 0");
             break;
     }
@@ -844,11 +861,12 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_DEFER: {
-            cg_comment(cg, "defer (NYI - treated as regular block)");
+            cg_warn(cg, node, "defer not yet implemented, treating as no-op");
             break;
         }
 
         default:
+            cg_warn(cg, node, "unsupported statement in codegen");
             break;
     }
 }
