@@ -6,5 +6,6 @@ enum Option {
 
 func main(): int {
     let x: Option = Option::Some(42)
+    let y: Option = Option::None
     return 0
 }
