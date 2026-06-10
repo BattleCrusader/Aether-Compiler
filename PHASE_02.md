@@ -51,20 +51,20 @@
 - [x] Captures program stdout/stderr via system()
 - [x] **MILESTONE**: `aether run hello.ae` prints output and exits cleanly
 
-### P02.07 — Host-native test runner (`P02.07`)
-- [ ] Tests compile with `--target host` and run natively
-- [ ] Update test fixtures to work as host-native binaries
-- [ ] `make test-host` target in Makefile
-- [ ] **MILESTONE**: 7 test fixtures compile and run on macOS
+### P02.07 — Host-native test runner (`P02.07`) 🟢
+- [x] Tests compile with `--target host` and run natively
+- [x] `make test-host` target in Makefile — compiles + executes 7 fixtures
+- [x] Expected exit codes checked per fixture
+- [x] **MILESTONE**: 7/7 test fixtures pass on macOS natively
 
-### P02.08 — Phase 2 Verification (`P02.08`)
-- [ ] `make clean && make test` still passes 28/28
-- [ ] 7 `.ae` fixtures compile with `--target host` and run on macOS
-- [ ] `aether run hello.ae` works end-to-end
-- [ ] Freestanding ELF64 output still works unchanged
-- [ ] Update STATUS.md — Phase 2 complete
-- [ ] Update PHASE_02.md with final status
-- [ ] **MILESTONE**: Phase 2 verified and documented
+### P02.08 — Phase 2 Verification (`P02.08`) 🟢
+- [x] `make clean && make test` — 28/28 passing
+- [x] 7 `.ae` fixtures compile with `--target host` and run on macOS
+- [x] `aether run <file.ae>` works end-to-end
+- [x] Freestanding ELF64 output still works unchanged
+- [x] Updated STATUS.md — Phase 2 complete
+- [x] Updated PHASE_02.md with final status
+- [x] **MILESTONE**: Phase 2 verified and documented
 
 ---
 
