@@ -1,0 +1,7 @@
+func identity<T>(value: T): T {
+    return value
+}
+
+func main(): u64 {
+    return identity(42)
+}

@@ -281,6 +281,19 @@ AstNode *parse_func_decl(Parser *p) {
     /* Note: 'asm func' is detected by the 'asm' keyword having been consumed
        and the next token being 'func' — handled at declaration level */
 
+    /* Generic type params: func Name<T, U>(params) — angle brackets after name */
+    if (parser_match(p, TOKEN_LT)) {
+        while (!parser_check(p, TOKEN_GT) && !parser_check(p, TOKEN_EOF)) {
+            if (parser_check(p, TOKEN_IDENT)) {
+                Token tp = p->current; parser_advance(p);
+                AstNode *tp_node = node_ident(p->arena, tp.loc, tp.text);
+                node_list_append(&func->data.func.type_params, tp_node);
+            } else { parser_advance(p); }
+            if (!parser_match(p, TOKEN_COMMA)) break;
+        }
+        parser_expect(p, TOKEN_GT, "generic type parameter list");
+    }
+
     /* Parameters: (params) */
     if (parser_match(p, TOKEN_LPAREN)) {
         func->data.func.params = parse_params(p);
