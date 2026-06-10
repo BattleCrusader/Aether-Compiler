@@ -4,11 +4,48 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 #define INITIAL_CAP 65536
 
 /* Forward declarations */
 static int type_size(AstNode *type);
+
+/* Process a raw string literal token value into actual bytes.
+ * Strips surrounding quotes, processes escape sequences.
+ * Returns the number of bytes written to out_buf (max max_len). */
+static int process_string_literal(StringView raw, char *out_buf, int max_len) {
+    int di = 0;
+    int i = 0;
+    if (i < (int)raw.len && raw.data[i] == '"') i++;
+    while (i < (int)raw.len && di < max_len) {
+        char c = raw.data[i];
+        if (c == '"') break;
+        if (c == '\\' && i + 1 < (int)raw.len) {
+            i++;
+            switch (raw.data[i]) {
+                case 'n':  out_buf[di++] = '\n'; break;
+                case 'r':  out_buf[di++] = '\r'; break;
+                case 't':  out_buf[di++] = '\t'; break;
+                case '\\': out_buf[di++] = '\\'; break;
+                case '"':  out_buf[di++] = '"';  break;
+                case 'x': {
+                    if (i + 2 < (int)raw.len && isxdigit((unsigned char)raw.data[i+1]) && isxdigit((unsigned char)raw.data[i+2])) {
+                        char hex[3] = {raw.data[i+1], raw.data[i+2], 0};
+                        out_buf[di++] = (char)strtoul(hex, NULL, 16);
+                        i += 2;
+                    }
+                    break;
+                }
+                default:   out_buf[di++] = c; break;
+            }
+        } else {
+            out_buf[di++] = c;
+        }
+        i++;
+    }
+    return di;
+}
 
 /* ================================================================
  * Target detection
@@ -292,18 +329,30 @@ typedef struct StringEntry {
 static StringEntry *string_entries = NULL;
 
 /* Emit a section .rodata entry for a string literal and return its label */
+/* Note: processes raw string (strips quotes, handles escapes) */
 static const char *cg_emit_string(Codegen *cg, StringView sv) {
+    /* Process the string: strip quotes, decode escapes */
+    char processed[8192];
+    int plen = process_string_literal(sv, processed, sizeof(processed) - 1);
+    processed[plen] = '\0';
+
     int n = string_label_counter++;
     char *label = (char *)arena_alloc(cg->arena, 64);
     snprintf(label, 64, ".Lstr%d", n);
-    
+
+    /* Allocate and copy processed data */
+    char *data = (char *)arena_alloc(cg->arena, (size_t)(plen + 1));
+    memcpy(data, processed, (size_t)plen);
+    data[plen] = '\0';
+
     /* Track for later emission */
     StringEntry *e = (StringEntry *)arena_alloc(cg->arena, sizeof(StringEntry));
-    e->sv = sv;
+    e->sv.data = data;
+    e->sv.len = (size_t)plen;
     e->label_num = n;
     e->next = string_entries;
     string_entries = e;
-    
+
     return label;
 }
 
@@ -683,6 +732,48 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_CALL: {
+            /* Check for built-in functions on host targets */
+            bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
+            if (is_host && node->data.call.callee->type == NODE_IDENT) {
+                char fn_name[256];
+                int nlen = (int)node->data.call.callee->data.ident.name.len;
+                if (nlen > 255) nlen = 255;
+                memcpy(fn_name, node->data.call.callee->data.ident.name.data, nlen);
+                fn_name[nlen] = '\0';
+
+                /* Built-in: print(string) — emit write syscall inline */
+                if (strcmp(fn_name, "print") == 0 && node->data.call.args.count >= 1) {
+                    AstNode *arg = node->data.call.args.items[0];
+                    cg_comment(cg, "print() built-in");
+                    if (arg->type == NODE_LITERAL_STRING) {
+                        const char *label = cg_emit_string(cg, arg->data.literal.string_val);
+
+                        /* Compute processed length */
+                        char processed[8192];
+                        int plen = process_string_literal(arg->data.literal.string_val, processed, sizeof(processed) - 1);
+
+                        if (cg->target == TARGET_MACHO64) {
+                            cg_inst1(cg, "mov", "rdi, 1");
+                            cg_write_fmt(cg, "    lea rsi, [rel %s]\n", label);
+                            cg_write_fmt(cg, "    mov rdx, %d\n", plen);
+                            cg_inst1(cg, "mov", "rax, 0x2000004");
+                            cg_inst(cg, "syscall");
+                        } else {
+                            cg_inst1(cg, "mov", "rdi, 1");
+                            cg_write_fmt(cg, "    lea rsi, [rel %s]\n", label);
+                            cg_write_fmt(cg, "    mov rdx, %d\n", plen);
+                            cg_inst1(cg, "mov", "rax, 1");
+                            cg_inst(cg, "syscall");
+                        }
+                        cg_inst1(cg, "xor", "rax, rax");
+                    } else {
+                        cg_warn(cg, arg, "print() only supports string literals on host targets");
+                        cg_inst1(cg, "xor", "rax, rax");
+                    }
+                    break;
+                }
+            }
+
             /* Check for enum construction: EnumName::Variant(args) */
             if (node->data.call.callee->type == NODE_FIELD_ACCESS) {
                 AstNode *target = node->data.call.callee->data.field.target;
@@ -1085,18 +1176,21 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         }
     }
 
-    /* Emit string table */
+    /* Emit string table — uses the label stored in each StringEntry */
     cg_write(cg, "section .rodata\n");
     for (StringEntry *e = string_entries; e; e = e->next) {
-        cg_write_fmt(cg, ".Lstr%d: db \"", e->label_num);
+        cg_write_fmt(cg, ".Lstr%d: db ", e->label_num);
+        /* Emit printable chars between quotes, non-printable as numeric */
+        cg_write(cg, "\"");
         for (size_t i = 0; i < e->sv.len; i++) {
-            char c = e->sv.data[i];
+            unsigned char c = (unsigned char)e->sv.data[i];
             if (c == '"') cg_write(cg, "\\\"");
             else if (c == '\\') cg_write(cg, "\\\\");
-            else if (c == '\n') cg_write(cg, "\\n");
-            else if (c == '\t') cg_write(cg, "\\t");
             else if (c >= 32 && c < 127) { char buf[2] = {c, 0}; cg_write(cg, buf); }
-            else { cg_write_fmt(cg, "\\x%02x", (unsigned char)c); }
+            else {
+                /* Non-printable: close string, emit as numeric, reopen */
+                cg_write_fmt(cg, "\", %u, \"", c);
+            }
         }
         cg_write(cg, "\", 0\n");
     }

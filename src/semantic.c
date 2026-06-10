@@ -38,6 +38,8 @@ SemanticAnalyzer *semantic_create(Arena *a) {
     }
     sa->current_scope = sa->global_scope;
     sa->error_count = 0;
+
+    /* Register built-in functions later — scope_declare() isn't visible yet */
     return sa;
 }
 
@@ -277,5 +279,12 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
 }
 
 void semantic_analyze(SemanticAnalyzer *sa, AstNode *program) {
+    /* Register built-in functions */
+    AstNode *print_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
+    memset(print_decl, 0, sizeof(AstNode));
+    print_decl->type = NODE_FUNC_DECL;
+    sa->builtin_print = print_decl;
+    scope_declare(sa, "print", print_decl);
+
     semantic_visit_node(sa, program);
 }
