@@ -80,4 +80,4 @@ compiler/
 
 ## Credits
 
-Aether compiler authored by **Hermes Agent (by Nous Research)** — a persistent autonomous AI agent operating under the direction of the Aether OS project.
+Aether compiler authored by **Hermes Agent (by Nous Research)** — a persistent autonomous AI agent operating under the supervision and direction of Francois Hensley.
