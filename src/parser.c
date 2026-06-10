@@ -509,7 +509,12 @@ AstNode *parse_statement(Parser *p) {
 
     /* defer */
     if (parser_match(p, TOKEN_KW_DEFER)) {
-        AstNode *body = parse_statement(p);
+        AstNode *body;
+        if (parser_match(p, TOKEN_LBRACE)) {
+            body = parse_block_braced(p);
+        } else {
+            body = parse_statement(p);
+        }
         return node_defer(p->arena, p->previous.loc, body);
     }
 

@@ -255,8 +255,8 @@ AstNode *node_enum_decl(Arena *a, Location loc, AstNode *name, bool is_pub) {
 }
 
 AstNode *node_defer(Arena *a, Location loc, AstNode *body) {
-    (void)body;
     AstNode *node = node_create(a, NODE_DEFER, loc);
+    if (node) node->data.defer_node.body = body;
     return node;
 }
 

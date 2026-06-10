@@ -26,6 +26,8 @@ typedef struct {
     int indent_level;        /* current asm indentation */
     AstNode *current_func;   /* function being generated */
     Target target;           /* output target format */
+    AstNode *defer_stack;    /* linked list of deferred ASTs (LIFO) */
+    int defer_count;         /* number of deferred items */
 } Codegen;
 
 Codegen *codegen_create(Arena *a);

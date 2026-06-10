@@ -9,7 +9,12 @@
 #define INITIAL_CAP 65536
 
 /* Forward declarations */
+typedef struct VarSlot VarSlot;
 static int type_size(AstNode *type);
+static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots);
+static void cg_defer_push(Codegen *cg, AstNode *body);
+static void cg_emit_defers(Codegen *cg, VarSlot *slots);
+static void cg_defer_clear(Codegen *cg);
 
 /* Process a raw string literal token value into actual bytes.
  * Strips surrounding quotes, processes escape sequences.
@@ -263,6 +268,8 @@ Codegen *codegen_create(Arena *a) {
     cg->indent_level = 0;
     cg->current_func = NULL;
     cg->target = TARGET_FREESTANDING;
+    cg->defer_stack = NULL;
+    cg->defer_count = 0;
     return cg;
 }
 
@@ -869,6 +876,14 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         case NODE_RETURN: {
             if (node->data.return_node.value) {
                 cg_expr(cg, node->data.return_node.value, slots);
+                /* Save return value; defers may clobber rax */
+                cg_inst1(cg, "push", "rax");
+            }
+            /* Emit defers before returning */
+            cg_emit_defers(cg, slots);
+            if (node->data.return_node.value) {
+                /* Restore return value */
+                cg_inst1(cg, "pop", "rax");
             }
             cg_inst1(cg, "mov", "rsp, rbp");
             cg_inst1(cg, "pop", "rbp");
@@ -1032,7 +1047,11 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_DEFER: {
-            cg_warn(cg, node, "defer not yet implemented, treating as no-op");
+            /* Push onto the current function's defer stack */
+            if (node->data.defer_node.body) {
+                cg_defer_push(cg, node->data.defer_node.body);
+                cg_comment(cg, "defer pushed");
+            }
             break;
         }
 
@@ -1106,10 +1125,13 @@ static void cg_func(Codegen *cg, AstNode *func) {
 
     /* Default return */
     cg_comment(cg, "default return");
+    cg_emit_defers(cg, slots);
     cg_inst1(cg, "mov", "rsp, rbp");
     cg_inst1(cg, "pop", "rbp");
     cg_inst(cg, "ret");
     cg_write(cg, "\n");
+
+    cg_defer_clear(cg);
 }
 
 /* ================================================================
@@ -1210,6 +1232,32 @@ int codegen_write_asm(Codegen *cg, const char *path) {
 
 const char *codegen_get_asm(Codegen *cg) {
     return cg->output;
+}
+
+/* ================================================================
+ * Defer helpers
+ * ================================================================ */
+
+static void cg_defer_push(Codegen *cg, AstNode *body) {
+    if (cg->current_func && cg->current_func->type == NODE_FUNC_DECL) {
+        node_list_append(&cg->current_func->data.func.defer_list, body);
+    }
+}
+
+static void cg_emit_defers(Codegen *cg, VarSlot *slots) {
+    if (!cg->current_func || cg->current_func->type != NODE_FUNC_DECL) return;
+    AstNodeList *defers = &cg->current_func->data.func.defer_list;
+    if (defers->count == 0) return;
+    cg_comment(cg, "defers");
+    for (int i = defers->count - 1; i >= 0; i--) {
+        cg_stmt(cg, defers->items[i], slots);
+    }
+}
+
+static void cg_defer_clear(Codegen *cg) {
+    if (cg->current_func && cg->current_func->type == NODE_FUNC_DECL) {
+        cg->current_func->data.func.defer_list.count = 0;
+    }
 }
 
 /* ================================================================

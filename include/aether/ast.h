@@ -145,6 +145,7 @@ typedef struct {
     bool is_static;         /* static */
     bool is_test;           /* @Test */
     int sys_index;          /* syscall table index (-1 if not sys) */
+    AstNodeList defer_list; /* deferred bodies for LIFO scope exit */
 } FuncDecl;
 
 /* Parameter */
@@ -316,6 +317,11 @@ typedef struct {
     AstNodeList clobbers;   /* clobbered registers */
 } AsmBlock;
 
+/* Defer statement */
+typedef struct {
+    AstNode *body;          /* deferred block or statement */
+} DeferNode;
+
 /* ================================================================
  * AST Node structure (tagged union of all the above)
  * ================================================================ */
@@ -348,6 +354,7 @@ struct AstNode {
         EnumDecl enum_decl;
         EnumVariant enum_variant;
         AsmBlock asm_block;
+        DeferNode defer_node;
         AstNodeList list;   /* generic list for blocks */
     } data;
 };
