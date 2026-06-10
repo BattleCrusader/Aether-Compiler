@@ -312,6 +312,48 @@ static void test_indent_balance() {
     PASS();
 }
 
+static void test_indent_in_func_body() {
+    TEST("indent inside braced func body — no indent tokens");
+    const char *src = "func main() {\nlet x = 1\nlet y = 2\n}\n";
+    Tokenizer *t = tokenizer_create(src, strlen(src), "test");
+    int indents = 0, dedents = 0;
+    while (true) {
+        Token tok = tokenizer_next(t);
+        if (tok.type == TOKEN_EOF) break;
+        if (tok.type == TOKEN_INDENT) indents++;
+        if (tok.type == TOKEN_DEDENT) dedents++;
+    }
+    tokenizer_destroy(t);
+    /* Braces override indentation — no indent/dedent inside func body */
+    ASSERT(indents == 0, "braced blocks should have 0 indents");
+    ASSERT(dedents == 0, "braced blocks should have 0 dedents");
+    PASS();
+}
+
+static void test_indent_mixed_brace_and_indent() {
+    TEST("mixed brace/indent — braces suppress indent");
+    const char *src =
+        "func outer() {\n"
+        "let x = 1\n"
+        "if true {\n"
+        "    let y = 2\n"
+        "}\n"
+        "let z = 3\n"
+        "}\n";
+    Tokenizer *t = tokenizer_create(src, strlen(src), "test");
+    int indents = 0, dedents = 0;
+    while (true) {
+        Token tok = tokenizer_next(t);
+        if (tok.type == TOKEN_EOF) break;
+        if (tok.type == TOKEN_INDENT) indents++;
+        if (tok.type == TOKEN_DEDENT) dedents++;
+    }
+    tokenizer_destroy(t);
+    /* Only the 4-space indented 'let y = 2' inside if should produce indent/dedent */
+    ASSERT(indents == dedents, "indent/dedent must balance");
+    PASS();
+}
+
 static void test_keywords() {
     TEST("all keywords recognized");
     const char *src =

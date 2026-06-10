@@ -16,6 +16,8 @@ static int tests_failed = 0;
 #define PASS() do { printf("PASS\n"); tests_passed++; } while(0)
 #define FAIL(msg) do { printf("FAIL: %s\n", msg); tests_failed++; return; } while(0)
 
+#define ASSERT(cond, msg) do { if (!(cond)) { FAIL(msg); return; } } while(0)
+
 static AstNode *parse_source(const char *source, const char *name) {
     Parser *p = parser_create(source, strlen(source), name ? name : "test");
     if (!p) return NULL;
@@ -100,6 +102,20 @@ static void test_if_stmt() {
     if (!p) { FAIL("parse failed"); return; }
     AstNode *f = find_func(p, "sign");
     if (!f) { FAIL("func not found"); return; }
+    // Verify function signature
+    ASSERT(f->data.func.params.count == 1, "1 param");
+    ASSERT(f->data.func.return_type != NULL, "return type present");
+    // Verify if/elif/else structure
+    AstNode *ifnode = f->data.func.body->data.list.items[0];
+    ASSERT(ifnode != NULL, "first stmt present");
+    if (f->data.func.body->data.list.count >= 1)
+        ASSERT(ifnode->type == NODE_IF, "first stmt is IF");
+    if (ifnode && ifnode->type == NODE_IF) {
+        ASSERT(ifnode->data.if_node.condition != NULL, "condition present");
+        ASSERT(ifnode->data.if_node.then_block != NULL, "then block present");
+        ASSERT(ifnode->data.if_node.elif_chain != NULL, "elif chain present");
+        ASSERT(ifnode->data.if_node.else_block != NULL, "else block present");
+    }
     PASS();
 }
 
@@ -108,6 +124,16 @@ static void test_while_loop() {
     const char *src = "func count() { let mut x = 0; while x < 10 { x = x + 1 } }";
     AstNode *p = parse_source(src, "while");
     if (!p) { FAIL("parse failed"); return; }
+    AstNode *f = find_func(p, "count");
+    if (!f) { FAIL("func not found"); return; }
+    // Verify while has condition and body
+    if (f->data.func.body && f->data.func.body->data.list.count >= 2) {
+        AstNode *w = f->data.func.body->data.list.items[1];
+        if (w->type == NODE_WHILE) {
+            ASSERT(w->data.while_node.condition != NULL, "while condition");
+            ASSERT(w->data.while_node.body != NULL, "while body");
+        }
+    }
     PASS();
 }
 
@@ -116,6 +142,20 @@ static void test_for_loop() {
     const char *src = "func sum(): int { let mut s = 0; for i in 0..10 { s = s + i }; return s }";
     AstNode *p = parse_source(src, "for");
     if (!p) { FAIL("parse failed"); return; }
+    AstNode *f = find_func(p, "sum");
+    if (!f) { FAIL("func not found"); return; }
+    // Verify for loop structure
+    if (f->data.func.body && f->data.func.body->data.list.count >= 2) {
+        AstNode *fornode = f->data.func.body->data.list.items[1];
+        if (fornode->type == NODE_FOR) {
+            ASSERT(fornode->data.for_node.var != NULL, "loop var");
+            ASSERT(fornode->data.for_node.iterable != NULL, "iterable");
+            ASSERT(fornode->data.for_node.iterable->type == NODE_BINARY_OP, "range is BINARY_OP");
+            if (fornode->data.for_node.iterable->type == NODE_BINARY_OP)
+                ASSERT(fornode->data.for_node.iterable->data.binary.op == BIN_RANGE, "range op");
+            ASSERT(fornode->data.for_node.body != NULL, "body");
+        }
+    }
     PASS();
 }
 
@@ -124,6 +164,20 @@ static void test_match() {
     const char *src = "func classify(x: int): string { match x { case 0 -> \"zero\" case _ -> \"other\" } }";
     AstNode *p = parse_source(src, "match");
     if (!p) { FAIL("parse failed"); return; }
+    AstNode *f = find_func(p, "classify");
+    if (!f) { FAIL("func not found"); return; }
+    AstNode *m = f->data.func.body->data.list.items[0];
+    if (m && m->type == NODE_MATCH) {
+        ASSERT(m->data.match_node.value != NULL, "match value");
+        ASSERT(m->data.match_node.arms.count >= 2, "at least 2 arms");
+        if (m->data.match_node.arms.count >= 2) {
+            ASSERT(m->data.match_node.arms.items[0]->data.match_arm.pattern != NULL, "arm0 pattern");
+            AstNode *last_arm = m->data.match_node.arms.items[m->data.match_node.arms.count - 1];
+            if (last_arm->data.match_arm.pattern->type == NODE_IDENT &&
+                sv_eq_cstr(last_arm->data.match_arm.pattern->data.ident.name, "_"))
+                ; // wildcard verified
+        }
+    }
     PASS();
 }
 
@@ -134,20 +188,32 @@ static void test_struct_decl() {
     if (!p) { FAIL("parse failed"); return; }
     if (count_decls(p) < 1) { FAIL("expected 1 decl"); return; }
     AstNode *s = p->data.list.items[0];
-    if (s->type != NODE_STRUCT_DECL) { FAIL("expected struct decl"); return; }
+    ASSERT(s->type == NODE_STRUCT_DECL, "expected struct decl");
+    ASSERT(s->data.struct_decl.fields.count == 2, "expected 2 fields");
+    if (s->data.struct_decl.fields.count >= 1) {
+        AstNode *f0 = s->data.struct_decl.fields.items[0];
+        ASSERT(f0->type == NODE_FIELD, "field is FIELD node");
+        ASSERT(f0->data.param.name != NULL, "field has name");
+        ASSERT(f0->data.param.type != NULL, "field has type");
+    }
     PASS();
 }
 
 static void test_enum_decl() {
     TEST("enum declaration");
-    const char *src = "enum Color { Red; Green; Blue; Rgb(u8, u8, u8) }";
+    const char *src = "enum Result { Ok(int, string); Err(string); None }";
     AstNode *p = parse_source(src, "enum");
     if (!p) { FAIL("parse failed"); return; }
     AstNode *e = p->data.list.items[0];
-    if (e->type != NODE_ENUM_DECL) { FAIL("expected enum decl"); return; }
-    if (e->data.enum_decl.variants.count < 3) {
-        char msg[64]; snprintf(msg, sizeof(msg), "expected 3+ variants, got %d", e->data.enum_decl.variants.count);
-        FAIL(msg); return;
+    ASSERT(e->type == NODE_ENUM_DECL, "expected enum decl");
+    ASSERT(e->data.enum_decl.variants.count == 3, "expected 3 variants");
+    if (e->data.enum_decl.variants.count >= 3) {
+        // Ok(int, string) has 2 payloads
+        ASSERT(e->data.enum_decl.variants.items[0]->data.enum_variant.payload_types.count == 2, "Ok 2 types");
+        // Err(string) has 1 payload
+        ASSERT(e->data.enum_decl.variants.items[1]->data.enum_variant.payload_types.count == 1, "Err 1 type");
+        // None has 0 payloads
+        ASSERT(e->data.enum_decl.variants.items[2]->data.enum_variant.payload_types.count == 0, "None 0 types");
     }
     PASS();
 }
