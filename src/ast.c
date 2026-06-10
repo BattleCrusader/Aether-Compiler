@@ -260,6 +260,15 @@ AstNode *node_defer(Arena *a, Location loc, AstNode *body) {
     return node;
 }
 
+AstNode *node_region(Arena *a, Location loc, StringView name, AstNode *body) {
+    AstNode *node = node_create(a, NODE_REGION, loc);
+    if (node) {
+        node->data.region_node.name = name;
+        node->data.region_node.body = body;
+    }
+    return node;
+}
+
 AstNode *node_expr_stmt(Arena *a, Location loc, AstNode *expr) {
     AstNode *node = node_create(a, NODE_EXPR_STMT, loc);
     if (node) node->data.call.callee = expr;
@@ -348,6 +357,7 @@ const char *node_type_name(NodeType type) {
         case NODE_TYPE_INFER: return "TYPE_INFER";
         case NODE_ASM_BLOCK: return "ASM_BLOCK";
         case NODE_ATTR: return "ATTR";
+        case NODE_REGION: return "REGION";
     }
     return "UNKNOWN";
 }

@@ -1,0 +1,7 @@
+func main() {
+    region("test") {
+        let p = heap 42
+        let val = *p
+        print("region works!\n")
+    }
+}

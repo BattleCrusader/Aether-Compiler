@@ -1070,6 +1070,28 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
         }
 
+        case NODE_REGION: {
+            int end_lbl = cg_new_label(cg);
+            cg_comment(cg, "region begin");
+            /* Save rsp, allocate 4KB arena on stack */
+            cg_inst(cg, "mov r15, rsp");          /* save rsp */
+            cg_inst(cg, "sub rsp, 4096");          /* arena on stack */
+            cg_inst(cg, "mov [rel __aether_region_cur], rsp");
+            cg_inst(cg, "lea rax, [rsp + 4096]");
+            cg_inst(cg, "mov [rel __aether_region_end], rax");
+            /* Run body */
+            if (node->data.region_node.body)
+                cg_stmt(cg, node->data.region_node.body, slots);
+            /* Region teardown: restore rsp */
+            cg_write_fmt(cg, ".L%x:\n", end_lbl);
+            cg_inst(cg, "mov rsp, r15");
+            cg_inst(cg, "xor rax, rax");
+            cg_inst(cg, "mov [rel __aether_region_cur], rax");
+            cg_inst(cg, "mov [rel __aether_region_end], rax");
+            cg_comment(cg, "region end");
+            break;
+        }
+
         default:
             cg_warn(cg, node, "unsupported statement in codegen");
             break;
@@ -1221,21 +1243,36 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "__aether_heap_start: resq 1\n");
         cg_write(cg, "__aether_heap_cur:   resq 1\n");
         cg_write(cg, "__aether_heap_end:   resq 1\n");
+        cg_write(cg, "__aether_region_cur: resq 1\n");
+        cg_write(cg, "__aether_region_end: resq 1\n");
         cg_write(cg, "\n");
 
         cg_write(cg, "section .text\n");
         cg_write(cg, "; __aether_alloc(rdi: size) -> rax: ptr\n");
-        cg_write(cg, "; Bump allocator — calls mmap once, hands out from a bounded arena.\n");
+        cg_write(cg, "; If region is active, bump from region first.\n");
         cg_write(cg, "__aether_alloc:\n");
         cg_inst1(cg, "push", "rbp");
         cg_inst1(cg, "mov", "rbp, rsp");
         /* Align size to 16 bytes */
         cg_inst(cg, "add rdi, 15");
         cg_inst(cg, "and rdi, ~15");
-        /* Load current bump pointer */
-        cg_inst(cg, "mov rax, [rel __aether_heap_cur]");
+        /* Check if region is active */
+        cg_inst(cg, "mov rax, [rel __aether_region_cur]");
         cg_inst1(cg, "test", "rax, rax");
-        cg_inst(cg, "jnz .Lalloc_try");
+        cg_inst(cg, "jz .Lalloc_heap");
+        /* Region alloc: bump from region arena */
+        cg_inst(cg, "lea rcx, [rax + rdi]");
+        cg_inst(cg, "cmp rcx, [rel __aether_region_end]");
+        cg_inst(cg, "jbe .Lalloc_region_ok");
+        /* Region overflow: fall through to heap */
+        cg_inst(cg, "jmp .Lalloc_heap");
+        cg_write(cg, ".Lalloc_region_ok:\n");
+        cg_inst(cg, "mov [rel __aether_region_cur], rcx");
+        cg_inst1(cg, "mov", "rsp, rbp");
+        cg_inst1(cg, "pop", "rbp");
+        cg_inst(cg, "ret");
+        cg_write(cg, ".Lalloc_heap:\n");
+        cg_inst1(cg, "push", "rdi");        /* save size */
         /* First allocation: mmap a 64KB arena */
         cg_write(cg, ".Lalloc_init:\n");
         if (cg->target == TARGET_MACHO64) {
