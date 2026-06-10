@@ -18,6 +18,7 @@ typedef struct {
     Scope *global_scope;
     Scope *current_scope;
     int error_count;
+    AstNode *builtin_print;   /* placeholder for print() built-in */
 } SemanticAnalyzer;
 
 SemanticAnalyzer *semantic_create(Arena *a);
