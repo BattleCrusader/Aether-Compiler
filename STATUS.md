@@ -55,7 +55,7 @@
 - [x] P03.06 — Optional types `T?` with `none` 🟢
 - [x] P03.07 — Phase 3 Verification (14/14 unit, 10/10 native, both targets) 🟢
 
-## Phase 3 — OOP and Type System 🔴 NOT STARTED
+## Phase 4 — OOP and Type System 🔵 IN PROGRESS
 - [ ] Classes with `init` (constructor) and `drop` (destructor)
 - [ ] Automatic destructor calls at scope exits (normal, early return, exception unwind, break/continue)
 - [ ] Method syntax: `self ref T`, `func method(self, ...)`
@@ -69,7 +69,7 @@
 - [ ] Pattern matching: `match expr { case ... => ... }`
 - [ ] `if let` pattern binding for optionals
 
-## Phase 4 — Advanced Language Features 🔴 NOT STARTED
+## Phase 5 — Advanced Language Features 🔴 NOT STARTED
 - [ ] Exception handling: `try`/`throw`/`catch`
 - [ ] Custom error types
 - [ ] Deterministic exceptions (tagged union return, no unwinding tables)
@@ -83,7 +83,7 @@
 - [ ] Properties: `get`/`set` syntactic sugar
 - [ ] Operator overloading
 
-## Phase 5 — Aether OS Integration 🔴 NOT STARTED
+## Phase 6 — Aether OS Integration 🔴 NOT STARTED
 - [ ] `sys func` keyword — direct syscall page calls (0x5000 table)
 - [ ] `module` keyword — generates kernel module `.ko` ELF
 - [ ] `@export` attribute — marks symbols for module loader
@@ -107,7 +107,7 @@
 - [ ] Linker script integration
 - [ ] Project manifest: `aether.toml` support
 
-## Phase 6 — Self-Hosting 🔴 NOT STARTED
+## Phase 7 — Self-Hosting 🔴 NOT STARTED
 - [ ] Compiler can compile its own tokenizer/lexer
 - [ ] Compiler can compile its own parser
 - [ ] Compiler can compile its own AST/semantic analysis
@@ -118,7 +118,7 @@
 - [ ] Compiler can compile itself with no C bootstrap
 - [ ] C bootstrap source archived as historical reference only
 
-## Phase 7 — Optimization & Polish 🔴 NOT STARTED
+## Phase 8 — Optimization & Polish 🔴 NOT STARTED
 - [ ] Constant folding and propagation
 - [ ] Dead code elimination
 - [ ] Aggressive inlining (especially generics)
