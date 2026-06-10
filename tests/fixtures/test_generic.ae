@@ -3,5 +3,5 @@ func identity<T>(value: T): T {
 }
 
 func main(): u64 {
-    return 42
+    return identity(42)
 }
