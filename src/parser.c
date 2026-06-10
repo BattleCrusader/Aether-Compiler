@@ -518,6 +518,26 @@ AstNode *parse_statement(Parser *p) {
         return node_defer(p->arena, p->previous.loc, body);
     }
 
+    /* region("name") { body } */
+    if (parser_match(p, TOKEN_KW_REGION)) {
+        parser_expect(p, TOKEN_LPAREN, "region name");
+        StringView name;
+        if (parser_check(p, TOKEN_STRING_LITERAL)) {
+            name = p->current.text;
+            parser_advance(p);
+        } else {
+            name = SV("anon");
+        }
+        parser_expect(p, TOKEN_RPAREN, "region name");
+        AstNode *body = NULL;
+        if (parser_match(p, TOKEN_LBRACE)) {
+            body = parse_block_braced(p);
+        } else {
+            body = parse_statement(p);
+        }
+        return node_region(p->arena, p->previous.loc, name, body);
+    }
+
     /* match */
     if (parser_match(p, TOKEN_KW_MATCH)) {
         AstNode *value = parse_expr(p);

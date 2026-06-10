@@ -42,14 +42,13 @@
 - [x] Clean git tree: no binary artifacts tracked, output goes to /tmp/
 - [x] Test: `test_ref_types.ae` — all three reference types parse and compile
 
-### P03.05 — `region { }` — Region-Based Allocation (`P03.05`)
-- [ ] Parser: `region("name") { block }` → `NODE_REGION`
-- [ ] AST: `NODE_REGION` with string name + body
-- [ ] Codegen: emit arena setup at region entry, teardown at region exit
-- [ ] Arena: fixed-size bump allocator (stack-based), O(1) teardown
-- [ ] `heap` inside a region allocates from the region arena
-- [ ] Add test fixture: `test_region.ae`
-- [ ] **MILESTONE**: `region { let x = heap T() }` frees all at region exit
+### P03.05 — `region { }` — Region-Based Allocation (`P03.05`) 🟢
+- [x] Parser: `region("name") { block }` → `NODE_REGION` with name + body
+- [x] AST: `RegionNode` + constructor + type name
+- [x] Codegen: allocates 4KB stack arena, sets `__aether_region_cur/end`
+- [x] `__aether_alloc` checks region first, bumps from region arena if active
+- [x] Region teardown: restore rsp (O(1), no individual frees needed)
+- [x] Test: `test_region.ae` — region with heap alloc + print, verified pass
 
 ### P03.06 — Optional Types `T?` with `none` (`P03.06`)
 - [ ] Parser: `T?` type suffix → tag+payload struct
