@@ -263,7 +263,8 @@ AstNodeList parse_params(Parser *p) {
             is_varargs = true;
         }
 
-        if (!parser_check(p, TOKEN_IDENT)) {
+        /* Allow both TOKEN_IDENT and TOKEN_KW_SELF as param names */
+        if (!parser_check(p, TOKEN_IDENT) && !parser_check(p, TOKEN_KW_SELF)) {
             parser_error(p, p->current, "expected parameter name");
             break;
         }
@@ -307,10 +308,19 @@ AstNode *parse_struct_decl(Parser *p) {
 
             bool is_pub = parser_match(p, TOKEN_KW_PUB);
 
+            /* Check if this is a method declaration: func name(...) */
+            if (parser_check(p, TOKEN_KW_FUNC)) {
+                parser_advance(p);
+                AstNode *method = parse_func_decl(p);
+                if (method) node_list_append(&st->data.struct_decl.methods, method);
+                continue;
+            }
+
             if (!parser_check(p, TOKEN_IDENT)) {
                 parser_error(p, p->current, "expected field name");
                 break;
             }
+            
             Token fname = p->current; parser_advance(p);
             AstNode *field_type = NULL;
             if (parser_match(p, TOKEN_COLON)) {
@@ -901,6 +911,10 @@ static AstNode *parse_prefix(Parser *p) {
         case TOKEN_KW_NONE:
             parser_advance(p);
             return node_none_literal(p->arena, loc);
+
+        case TOKEN_KW_SELF:
+            parser_advance(p);
+            return node_ident(p->arena, loc, SV("self"));
 
         case TOKEN_IDENT:
             parser_advance(p);
