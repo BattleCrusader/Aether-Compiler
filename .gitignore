@@ -1,5 +1,12 @@
 build
 *.elf
-.DS_Store*.out
-tests/fixtures/hello_native
+*.out
 .DS_Store
+tests/fixtures/hello
+tests/fixtures/test_math
+tests/fixtures/test_params
+tests/fixtures/test_types
+tests/fixtures/test_struct
+tests/fixtures/test_enum
+tests/fixtures/test_match
+tests/fixtures/hello_native

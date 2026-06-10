@@ -32,7 +32,7 @@
 - [x] P01.13 — Self-Host Test Suite Expansion 🟢
 - [x] P01.14 — Phase 1 Verification & Cleanup 🟢
 
-## Phase 2 — Host-Native Output (PRIORITY) 🟢 P02.01-P02.05 COMPLETE
+## Phase 2 — Host-Native Output (PRIORITY) 🟢 P02.01-P02.08 COMPLETE
 - [x] Target enum + codegen.h types 🟢
 - [x] `--target` CLI flag (host, x86_64-freestanding, macho64, elf64-host) 🟢
 - [x] `codegen_set_target()` / `codegen_detect_host()` 🟢
@@ -43,7 +43,7 @@
 - [x] Host-native `print()` built-in with macOS write syscall 🟢
 - [x] String literal processing (strip quotes, decode escapes) 🟢
 - [x] `aether run <file.ae>` — compile + execute in one step 🟢
-- [ ] Host-native test runner: `.ae` test suite runs natively on dev machine
+- [x] Host-native test runner — `make test-host` (7/7 passing) 🟢
 - [ ] `aether.toml` target configuration
 
 ## Phase 3 — Memory Management 🔴 NOT STARTED
@@ -159,7 +159,7 @@
 
 1. **Phase 0**: Tokenizer in C → Parser in C → AST
 2. **Phase 1**: Core language features, ELF64 output, hello.ae on QEMU
-3. **Phase 2 (PRIORITY)**: Host-native output — compile and run `.ae` on macOS/Linux natively
+3. **Phase 2**: Host-native output — compile and run `.ae` on macOS/Linux natively ✅
 4. **Phase 3**: Memory management — stack, escape analysis, references
 5. ... sequential through phases
 
