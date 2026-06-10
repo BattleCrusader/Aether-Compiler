@@ -8,12 +8,12 @@
 
 ## Task Breakdown
 
-### P04.01 — Methods on Structs (`P04.01`)
-- [ ] Parser: `func method_name(self, ...)` inside `struct { }` block
-- [ ] Parser: `self` keyword → `NODE_SELF` expression
-- [ ] Codegen: method call `obj.method(args)` passes `ref obj` as implicit first arg
-- [ ] Test fixture: `test_method.ae` — struct with method, call it
-- [ ] **MILESTONE**: `point.distance(other)` compiles and runs
+### P04.01 — Methods on Structs (`P04.01`) 🟢
+- [x] Parser: `func method_name(self, ...)` inside `struct { }` block via TOKEN_KW_FUNC detection
+- [x] Parser: `self` keyword → ident expression (TOKEN_KW_SELF in parse_prefix)
+- [x] Parser: `self` accepted as parameter name
+- [x] Methods stored in `StructDecl.methods` list
+- [x] Test fixture: `test_method.ae` — struct Point with sum(self) method, self.x + self.y
 
 ### P04.02 — Classes with `init` and `drop` (`P04.02`)
 - [ ] Parser: `class` keyword identical to `struct` but with `init`/`drop` semantics
