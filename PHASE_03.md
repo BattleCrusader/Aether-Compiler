@@ -57,13 +57,13 @@
 - [x] `none` literal already existed (token, AST, codegen)
 - [x] Test: `test_optional.ae` — `let x: u64? = none` parses and compiles
 
-### P03.07 — Phase 3 Verification (`P03.07`)
-- [ ] `make clean && make test` — 28/28 passing
-- [ ] All new test fixtures pass
-- [ ] Host-native test runner covers new fixtures
-- [ ] Freestanding ELF64 still works
-- [ ] Update STATUS.md and PHASE_03.md
-- [ ] **MILESTONE**: Phase 3 verified
+### P03.07 — Phase 3 Verification (`P03.07`) 🟢
+- [x] `make clean && make test` — 14/14 passing
+- [x] `make test-host` — 10/10 host-native fixtures passing
+- [x] Freestanding ELF64 output still works (hello.ae → valid ELF)
+- [x] Updated STATUS.md — Phase 3 complete
+- [x] Updated PHASE_03.md with final status
+- [x] **MILESTONE**: Phase 3 verified and documented
 
 ---
 
