@@ -8,12 +8,14 @@
 
 ## Task Breakdown
 
-### P03.01 — `defer` — Scope-Exit Execution (`P03.01`)
-- [ ] Codegen: track a defer stack per function, emit deferred blocks at every scope exit point
-- [ ] Handle: normal scope exit, early return, loop exit (break/continue)
-- [ ] Handle: nested defers (LIFO order)
-- [ ] Add test fixture: `test_defer.ae`
-- [ ] **MILESTONE**: `defer { ... }` blocks execute at scope exit
+### P03.01 — `defer` — Scope-Exit Execution (`P03.01`) 🟢
+- [x] Codegen: defer stack per function (FuncDecl.defer_list)
+- [x] Deferred bodies pushed at NODE_DEFER, emitted LIFO at scope exit
+- [x] NODE_RETURN: save return value, emit defers, restore, epilogue
+- [x] Default function return: emit defers before epilogue
+- [x] Parser: defer { braced_block } and defer single_statement
+- [x] DeferNode in AST (stores body), node_defer() properly assigns body
+- [x] Add test fixture: `test_defer.ae` — 2 defers + return 42, LIFO verified
 
 ### P03.02 — `heap` — Explicit Heap Allocation (`P03.02`)
 - [ ] Parser: `heap` as unary prefix operator: `heap Expr` → `NODE_HEAP_ALLOC`

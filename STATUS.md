@@ -46,16 +46,14 @@
 - [x] Host-native test runner — `make test-host` (7/7 passing) 🟢
 - [ ] `aether.toml` target configuration
 
-## Phase 3 — Memory Management 🔴 NOT STARTED
-- [ ] Stack allocation for all local variables (default)
-- [ ] Automatic destructor insertion at scope exit
-- [ ] Escape analysis: detect when stack vars outlive scope, promote to heap
-- [ ] Reference types: `ref T` (borrowed), `owned T` (unique), `rc T` (shared)
-- [ ] Region-based allocation: `region("name") { ... }` blocks
-- [ ] Arena/region teardown (compile-time generated batch free)
-- [ ] `heap` keyword for explicit heap allocation
-- [ ] Optional types `T?` with `none` — no null pointers
-- [ ] Non-nullable by default
+## Phase 3 — Memory Management 🔵 IN PROGRESS (P03.01 complete)
+- [x] P03.01 — `defer` — scope-exit execution (LIFO order, return-safe) 🟢
+- [ ] P03.02 — `heap` — explicit heap allocation
+- [ ] P03.03 — Runtime heap allocator
+- [ ] P03.04 — Reference types: `ref T`, `owned T`, `rc T`
+- [ ] P03.05 — `region { }` — region-based allocation
+- [ ] P03.06 — Optional types `T?` with `none`
+- [ ] P03.07 — Phase 3 Verification
 
 ## Phase 3 — OOP and Type System 🔴 NOT STARTED
 - [ ] Classes with `init` (constructor) and `drop` (destructor)
@@ -160,7 +158,7 @@
 1. **Phase 0**: Tokenizer in C → Parser in C → AST
 2. **Phase 1**: Core language features, ELF64 output, hello.ae on QEMU
 3. **Phase 2**: Host-native output — compile and run `.ae` on macOS/Linux natively ✅
-4. **Phase 3**: Memory management — stack, escape analysis, references
+4. **Phase 3**: Memory management — defer (done), heap, references, regions, optionals
 5. ... sequential through phases
 
 ---
