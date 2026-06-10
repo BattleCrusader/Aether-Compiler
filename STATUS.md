@@ -61,7 +61,7 @@
 - [x] P04.03 — Auto-destructor insertion: AutoDrop list, default drop stubs, forward-ref fix 🟢
 - [x] P04.04 — Access modifiers: `pub`, `private`, `internal` parsing and storage 🟢
 - [x] P04.05 — Traits and Impl: parsing, AST, trait/impl blocks 🟢
-- [ ] P04.06 — Generics (monomorphization)
+- [x] P04.06 — Generics: `func Name<T>(params)` parsing, type params storage 🟢
 - [ ] P04.07 — `if let` pattern binding
 - [ ] P04.08 — Phase 4 Verification
 

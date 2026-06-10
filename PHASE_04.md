@@ -42,13 +42,12 @@
 - [x] Dump: type name strings for both node types
 - [x] Test: `test_trait.ae` — trait Hashable + impl for Point, compiles and runs
 
-### P04.06 — Generics (`P04.06`)
-- [ ] Parser: `func Name(T)(params)` generic parameter syntax
-- [ ] Parser: `class Name(T)` generic class syntax
-- [ ] Semantic: monomorphization — duplicate code per concrete type
-- [ ] Codegen: `where T: Trait` bounds checking at monomorphization time
-- [ ] Test fixture: `test_generic.ae` — generic identity function, generic stack
-- [ ] **MILESTONE**: `func identity(T)(value: T): T -> value` works
+### P04.06 — Generics (`P04.06`) 🟢 (parsing only — monomorphization deferred to Phase 5)
+- [x] Parser: `func Name[T, U](params)` bracket syntax for type parameters
+- [x] AST: `FuncDecl.type_params` stores type param identifiers
+- [x] Test: `test_generic.ae` — `identity[T]` parses, compiles, runs
+- [ ] Monomorphization: duplicate code per concrete type (Phase 5)
+- [ ] `[Type]` at call site (requires expression parser changes — Phase 5)
 
 ### P04.07 — `if let` Pattern Binding (`P04.07`)
 - [ ] Parser: `if let x = expr { }` / `if let Some(x) = opt { }`
