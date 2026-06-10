@@ -55,19 +55,15 @@
 - [x] P03.06 — Optional types `T?` with `none` 🟢
 - [x] P03.07 — Phase 3 Verification (14/14 unit, 10/10 native, both targets) 🟢
 
-## Phase 4 — OOP and Type System 🔵 IN PROGRESS
-- [ ] Classes with `init` (constructor) and `drop` (destructor)
-- [ ] Automatic destructor calls at scope exits (normal, early return, exception unwind, break/continue)
-- [ ] Method syntax: `self ref T`, `func method(self, ...)`
-- [ ] Static methods: `static func name(...)`
-- [ ] Access modifiers: `pub`, `internal`, `private`
-- [ ] Traits (interfaces): `trait Name { ... }` / `impl Name for Type { ... }`
-- [ ] Static dispatch (default, zero-cost)
-- [ ] Dynamic dispatch via `dyn Trait` (vtable)
-- [ ] Generics: monomorphized, `func(T)(...)`, `class(T)`
-- [ ] Algebraic data types: `enum` with payloads
-- [ ] Pattern matching: `match expr { case ... => ... }`
-- [ ] `if let` pattern binding for optionals
+## Phase 4 — OOP and Type System 🔵 IN PROGRESS (P04.01 complete)
+- [x] P04.01 — Struct methods: parsing, self keyword, field access in methods 🟢
+- [ ] P04.02 — Classes with `init` (constructor) and `drop` (destructor)
+- [ ] P04.03 — Automatic destructor insertion at scope exits
+- [ ] P04.04 — Access modifiers: `pub`, `internal`, `private`
+- [ ] P04.05 — Traits and Impl (interfaces)
+- [ ] P04.06 — Generics (monomorphization)
+- [ ] P04.07 — `if let` pattern binding
+- [ ] P04.08 — Phase 4 Verification
 
 ## Phase 5 — Advanced Language Features 🔴 NOT STARTED
 - [ ] Exception handling: `try`/`throw`/`catch`
