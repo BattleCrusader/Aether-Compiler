@@ -688,7 +688,20 @@ AstNode *parse_type_annotation(Parser *p) {
     return NULL;
 }
 
+/* Forward declarations for type parsing */
+static AstNode *parse_type_base(Parser *p);
+static AstNode *parse_type_postfix(Parser *p, AstNode *base);
+
 AstNode *parse_type(Parser *p) {
+    AstNode *base = parse_type_base(p);
+    return parse_type_postfix(p, base);
+}
+
+/* Forward declarations for type parsing */
+static AstNode *parse_type_base(Parser *p);
+static AstNode *parse_type_postfix(Parser *p, AstNode *base);
+
+static AstNode *parse_type_base(Parser *p) {
     /* Primitive types */
     if (parser_check(p, TOKEN_IDENT)) {
         StringView name = p->current.text;
@@ -758,14 +771,6 @@ AstNode *parse_type(Parser *p) {
         return t;
     }
 
-    /* ?T (optional) */
-    if (parser_match(p, TOKEN_QUESTION)) {
-        AstNode *inner = parse_type(p);
-        AstNode *t = node_create(p->arena, NODE_TYPE_OPTIONAL, p->previous.loc);
-        t->data.type_node.elem_type = inner;
-        return t;
-    }
-
     /* ref T — borrowed reference */
     if (parser_match(p, TOKEN_KW_REF)) {
         AstNode *inner = parse_type(p);
@@ -795,6 +800,17 @@ AstNode *parse_type(Parser *p) {
     parser_error(p, p->current, "expected type");
     parser_advance(p); /* skip */
     return NULL;
+}
+
+/* Postfix type modifiers — called after a base type is parsed */
+static AstNode *parse_type_postfix(Parser *p, AstNode *base) {
+    /* T? (optional) */
+    if (parser_match(p, TOKEN_QUESTION)) {
+        AstNode *t = node_create(p->arena, NODE_TYPE_OPTIONAL, p->previous.loc);
+        t->data.type_node.elem_type = base;
+        return t;
+    }
+    return base;
 }
 
 /* ================================================================

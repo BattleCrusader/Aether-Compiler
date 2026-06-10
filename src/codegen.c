@@ -228,6 +228,9 @@ static int type_size(AstNode *type) {
         }
     }
     if (type->type == NODE_TYPE_PTR || type->type == NODE_TYPE_REF) return 8;
+    if (type->type == NODE_TYPE_OPTIONAL) {
+        return 1 + type_size(type->data.type_node.elem_type);
+    }
     if (type->type == NODE_TYPE_ARRAY && type->data.type_node.array_size > 0) {
         return type->data.type_node.array_size * type_size(type->data.type_node.elem_type);
     }

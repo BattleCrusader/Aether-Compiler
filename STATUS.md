@@ -46,14 +46,14 @@
 - [x] Host-native test runner — `make test-host` (7/7 passing) 🟢
 - [ ] `aether.toml` target configuration
 
-## Phase 3 — Memory Management 🔵 IN PROGRESS (P03.01-P03.05 complete)
+## Phase 3 — Memory Management 🟢 P03.01-P03.07 COMPLETE
 - [x] P03.01 — `defer` — scope-exit execution (LIFO order, return-safe) 🟢
 - [x] P03.02 — `heap` — explicit heap allocation via mmap syscall 🟢
 - [x] P03.03 — Bump allocator runtime (64KB arena, O(1), auto-grow) 🟢
 - [x] P03.04 — Reference types: `ref T`, `owned T`, `rc T` type annotations 🟢
 - [x] P03.05 — `region { }` — stack-arena allocation (4KB, O(1) teardown) 🟢
-- [ ] P03.06 — Optional types `T?` with `none`
-- [ ] P03.07 — Phase 3 Verification
+- [x] P03.06 — Optional types `T?` with `none` 🟢
+- [x] P03.07 — Phase 3 Verification (14/14 unit, 10/10 native, both targets) 🟢
 
 ## Phase 3 — OOP and Type System 🔴 NOT STARTED
 - [ ] Classes with `init` (constructor) and `drop` (destructor)
@@ -158,8 +158,8 @@
 1. **Phase 0**: Tokenizer in C → Parser in C → AST
 2. **Phase 1**: Core language features, ELF64 output, hello.ae on QEMU
 3. **Phase 2**: Host-native output — compile and run `.ae` on macOS/Linux natively ✅
-4. **Phase 3**: Memory management — defer (done), heap, references, regions, optionals
-5. ... sequential through phases
+4. **Phase 3**: Memory management — defer, heap, regions, optionals ✅
+5. **Phase 4**: OOP and type system — classes, traits, generics, closures
 
 ---
 
