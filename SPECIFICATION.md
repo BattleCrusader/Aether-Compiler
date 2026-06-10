@@ -300,9 +300,9 @@ for i in 0..100 {
 ```aether
 type PageNumber = u64
 type Buffer = [u8; 4096]
-type Result(T) = Ok(T) | Err(string)  # anonymous enum
+type Result<T> = Ok(T) | Err(string)  # anonymous enum
 
-type GenericList(T) = struct {
+type GenericList<T> = struct {
     data ptr T
     count u64
     capacity u64
@@ -938,13 +938,13 @@ enum Optional(T) {
     None
 }
 
-enum Result(T, E) {
+enum Result<T, E> {
     Ok(T)
     Err(E)
 }
 
 # Usage
-let r: Result(int, string) = Result::Ok(42)
+let r: Result<int, string> = Result::Ok(42)
 match r {
     case Ok(val) => print("got {val}")
     case Err(msg) => print("error: {msg}")
@@ -954,9 +954,9 @@ match r {
 ### 10.3 Recursive Enums
 
 ```aether
-enum Tree(T) {
+enum Tree<T> {
     Leaf(T)
-    Node(ref Tree(T), ref Tree(T))
+    Node(ref Tree<T>, ref Tree<T>)
 }
 ```
 
@@ -1153,7 +1153,7 @@ impl Hashable for Point {
 
 ```aether
 # Static dispatch — compiler knows the concrete type
-func print_hash(T where T: Hashable)(value T) {
+func print_hash<T where T: Hashable>(value T) {
     print(value.hash())
 }
 
@@ -1220,7 +1220,7 @@ func min<T, U>(a: T, b: U) { ... }
 ### 13.2 Generic Structs and Classes
 
 ```aether
-class Stack(T) {
+class Stack<T> {
     data [T]
     count int
     capacity int
@@ -1230,7 +1230,7 @@ class Stack(T) {
         self.data = heap [T; capacity]
     }
     
-    pub func push(self ref Stack(T), item T) {
+    pub func push(self ref Stack<T>, item T) {
         if self.count >= self.capacity {
             self.grow()
         }
@@ -1238,14 +1238,14 @@ class Stack(T) {
         self.count += 1
     }
     
-    pub func pop(self ref Stack(T)) T? {
+    pub func pop(self ref Stack<T>) T? {
         if self.count == 0 { return none }
         self.count -= 1
         return self.data[self.count]
     }
 }
 
-let stack = Stack(int)(16)
+let stack = Stack<int>(16)
 stack.push(42)
 let val = stack.pop()  # Optional::Some(42)
 ```
@@ -1263,7 +1263,7 @@ let max_f = max(3.14, 2.71)   # max(float, float) — generated
 ### 13.4 Where Clauses
 
 ```aether
-func serialize_all(T where T: Serializable)(items [T]) [byte] {
+func serialize_all<T where T: Serializable>(items [T]) [byte] {
     let mut result = [byte]()
     for item in items {
         result.append(item.serialize())
