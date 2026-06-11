@@ -199,9 +199,33 @@ func example() {
 }
 ```
 
-### 2.6 Statement Termination
+### 2.7 Multi-Line Strings
 
-Statements end at newlines unless the expression clearly continues:
+Long strings spanning multiple lines use triple-quotes `"""`:
+
+```aether
+# Multi-line string — preserves newlines and indentation
+let msg = """
+Hello, Aether!
+This is a multi-line string.
+    Indented lines are preserved as-is.
+"""
+
+# Multi-line strings with interpolation
+let name = "world"
+let greeting = """
+Hello, {name}!
+Nice to meet you.
+"""
+
+# Useful for inline assembly templates, format strings, or embedded data
+let boot_msg = """
+Aether OS v0.1
+Boot sequence initiated
+Loading kernel...
+```
+
+### 2.7 Statement Termination
 
 ```aether
 # Multi-line expression (continues because line ends with operator)
