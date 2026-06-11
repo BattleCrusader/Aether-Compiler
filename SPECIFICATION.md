@@ -303,9 +303,9 @@ type Buffer = [u8; 4096]
 type Result<T> = Ok(T) | Err(string)  # anonymous enum
 
 type GenericList<T> = struct {
-    data ptr T
-    count u64
-    capacity u64
+    data: ptr T
+    count: u64
+    capacity: u64
 }
 ```
 
@@ -394,7 +394,9 @@ func add(a: int, b: int): int {
 }
 
 # Implicit return (last expression)
-func multiply(a: int, b: int): int -> a * b
+func multiply(a: int, b: int): int {
+    return a * b
+}
 ```
 
 > **Syntax note:** Parameters use `name: type` notation (required). Return types use `: type` after the parameter list (required when a return type is present).
@@ -472,7 +474,7 @@ func factorial_tr(n: u64, acc: u64 = 1): u64 {
 ### 5.8 Closures / Lambdas
 
 ```aether
-let increment = |x| x + 1
+let increment = |x: int| x + 1
 let result = increment(41)  # 42
 
 let add = |a, b| a + b
@@ -488,7 +490,9 @@ let process = |items: [int]| {
 ### 5.9 Higher-Order Functions
 
 ```aether
-func apply(T)(value: T, f: func(T) T): T -> f(value)
+func apply<T>(value: T, f: func(T): T): T {
+    return f(value)
+}
 
 let double = |x: int| x * 2
 let result = apply(21, double)  # 42
@@ -686,7 +690,7 @@ func process() {
 When a reference to a stack variable could outlive the stack frame, the compiler **automatically promotes** the allocation to the heap.
 
 ```aether
-func make_pair(a int, b int) ref Pair {
+func make_pair(a: int, b: int): ref Pair {
     let p = Pair(a, b)
     # Compiler detects: p's reference escapes this function
     # Auto-promotes to heap allocation
@@ -733,7 +737,7 @@ This is ideal for OS kernel code — interrupt handlers, packet processing, sysc
 pool UsbDescriptor of size 64, count 128, alignment 16
 
 # Using the pool
-func alloc_descriptor() -> ref UsbDescriptor {
+func alloc_descriptor(): ref UsbDescriptor {
     return UsbDescriptor()  # allocated from pool
 }  # returned to pool on drop
 
@@ -787,7 +791,7 @@ The compiler inserts `drop` calls:
 ### 8.2 Borrowed References (`ref`)
 
 ```aether
-func read_data(buf ref Buffer) {
+func read_data(buf: ref Buffer) {
     print(buf.size())  # borrowing, not owning
 }  # nothing freed — borrow expires
 
@@ -799,7 +803,7 @@ read_data(buf)         # auto-borrowed (inferred)
 ### 8.3 Move Semantics (`owned`)
 
 ```aether
-func take_ownership(buf owned Buffer) {
+func take_ownership(buf: owned Buffer) {
     process(buf)
 }  # buf freed here
 
@@ -821,7 +825,7 @@ process(copy)          # ref count = 2 (same allocation)
 ### 8.5 Raw Pointers (`ptr`, unsafe)
 
 ```aether
-func dma_transfer(addr ptr u64, value u64) {
+func dma_transfer(addr: ptr u64, value: u64) {
     unsafe {
         *addr = value
     }
@@ -876,7 +880,9 @@ struct Point {
         return sqrt(f32(dx * dx + dy * dy))
     }
     
-    func to_tuple(self ref Point) -> (self.x, self.y)
+    func to_tuple(self: ref Point): (int, int) {
+    return (self.x, self.y)
+}
     
     static func origin() Point -> Point(0, 0)
 }
@@ -1027,7 +1033,9 @@ class File {
     }
     
     # Property (accessor syntax)
-    pub prop path(self) string -> self.path
+    pub prop path(self): string {
+    return self.path
+}
     
     # Static method
     pub static func temp() File {
@@ -1096,11 +1104,15 @@ The compiler inserts destructor calls at every scope exit path:
 
 ```aether
 class Base {
-    pub func speak(self) string -> "base"
+    pub func speak(self): string {
+    return "base"
+}
 }
 
 class Derived : Base {
-    pub func speak(self) string -> "derived"
+    pub func speak(self): string {
+    return "derived"
+}
 }
 
 # Virtual dispatch (opt-in)
@@ -1153,7 +1165,7 @@ impl Hashable for Point {
 
 ```aether
 # Static dispatch — compiler knows the concrete type
-func print_hash<T where T: Hashable>(value T) {
+func print_hash<T: Hashable>(value: T) {
     print(value.hash())
 }
 
@@ -1166,7 +1178,7 @@ print_hash(Point(3, 4))
 
 ```aether
 # Dynamic dispatch — vtable
-func print_hash_dyn(value ref dyn Hashable) {
+func print_hash_dyn(value: ref dyn Hashable) {
     print(value.hash())  # indirect call through vtable
 }
 ```
@@ -1188,7 +1200,7 @@ for item in items {
 ### 12.6 Trait Bounds
 
 ```aether
-func sorted(T where T: Hashable + Eq)(items [T]) [T] {
+func sorted<T: Hashable + Eq>(items: [T]): [T] {
     # T must implement both Hashable and Eq
 }
 ```
@@ -1221,16 +1233,16 @@ func min<T, U>(a: T, b: U) { ... }
 
 ```aether
 class Stack<T> {
-    data [T]
-    count int
-    capacity int
+    data: [T]
+    count: int
+    capacity: int
     
-    pub func init(self, capacity int = 16) {
+    pub func init(self, capacity: int = 16) {
         self.capacity = capacity
         self.data = heap [T; capacity]
     }
     
-    pub func push(self ref Stack<T>, item T) {
+    pub func push(self: ref Stack<T>, item: T) {
         if self.count >= self.capacity {
             self.grow()
         }
@@ -1238,7 +1250,7 @@ class Stack<T> {
         self.count += 1
     }
     
-    pub func pop(self ref Stack<T>) T? {
+    pub func pop(self: ref Stack<T>): T? {
         if self.count == 0 { return none }
         self.count -= 1
         return self.data[self.count]
@@ -1362,7 +1374,7 @@ let value = divide(10, 2)?  # if throws, function returns early with the error
 ### 15.1 Basic Inline
 
 ```aether
-func outb(port u16, value byte) {
+func outb(port: u16, value: byte) {
     asm {
         mov dx, port
         mov al, value
@@ -1374,7 +1386,7 @@ func outb(port u16, value byte) {
 ### 15.2 Input/Output Binding
 
 ```aether
-func rdtsc() u64 {
+func rdtsc(): u64 {
     let hi u32
     let lo u32
     asm -> (hi, lo) {
@@ -1472,7 +1484,7 @@ asm func _idt_handler() {
 ### 15.5 Mixing Aether and Assembly
 
 ```aether
-func setup_interrupts() {
+func setup_interrupts(): {
     let idt_ptr IDTDescriptor
     
     asm {
@@ -1484,7 +1496,7 @@ func setup_interrupts() {
     print("Interrupts enabled\n")
 }
 
-func read_cr0() u64 {
+func read_cr0(): u64 {
     let value u64
     asm -> (value) {
         mov [value], cr0
@@ -1492,7 +1504,7 @@ func read_cr0() u64 {
     return value
 }
 
-func write_cr3(value u64) {
+func write_cr3(value: u64) {
     asm {
         mov cr3, value
     }
@@ -1508,21 +1520,21 @@ func write_cr3(value u64) {
 ```aether
 # These compile to direct calls through the 0x5000 syscall page
 
-sys func putc(c byte) at(0) {
+sys func putc(c: byte) at(0) {
     # offset 0 in syscall table: 0x5000
 }
 
-sys func puts(s string) at(1) {
+sys func puts(s: string) at(1) {
     # offset 1: 0x5008
 }
 
-sys func open(path string) int at(2)
-sys func read(fd int, buf ref [u8]) int at(3)
-sys func write(fd int, data [u8]) int at(4)
-sys func getcwd() int at(5)
-sys func chdir(ino int) at(6)
+sys func open(path: string): int at(2)
+sys func read(fd: int, buf: ref [u8]): int at(3)
+sys func write(fd: int, data: [u8]): int at(4)
+sys func getcwd(): int at(5)
+sys func chdir(ino: int) at(6)
 sys func exit() at(7)
-sys func booleval(v u64) u64 at(8)
+sys func booleval(v: u64): u64 at(8)
 ```
 
 The compiler emits:
@@ -1555,13 +1567,13 @@ module serial_driver {
     }
     
     # Internal helper
-    func cmd_serial(args [string]) int {
+    func cmd_serial(args: [string]): int {
         print("serial: {args}\n")
         return 0
     }
     
     # Hook handler for quantum boolean override
-    func boolhook_handler(value u64) u64 {
+    func boolhook_handler(value: u64): u64 {
         # quantum logic
         return value
     }
@@ -1578,7 +1590,7 @@ The module keyword tells the compiler:
 ```aether
 # /bin/ executable — loaded at 0x2000000
 @entry(0x2000000)
-func main(args [][]byte) int {
+func main(args: [][]byte): int
     puts("Hello from Aether binary!\n")
     return 0
 }
@@ -1589,19 +1601,19 @@ func main(args [][]byte) int {
 ```aether
 # Stage 1: 512-byte MBR boot sector
 @layout(start=0x7C00, max=512, file="stage1.bin")
-func stage1_mbr() {
+func stage1_mbr(): {
     asm { ... boot code ... }
 }
 
 # Stage 2: ATA PIO loader
 @layout(start=0x7E00, file="stage2.bin")
-func stage2_loader() {
+func stage2_loader(): {
     asm { ... load kernel from disk ... }
 }
 
 # Kernel: loaded at 0x1000000
 @layout(start=0x1000000, file="kernel.elf")
-func kernel_main() {
+func kernel_main(): {
     init_serial()
     init_memory()
     mount_fs()
@@ -1614,7 +1626,7 @@ func kernel_main() {
 
 ```aether
 @kernel_layout
-func verify_layout() {
+func verify_layout(): {
     # Compiler knows the Aether memory map
     # and verifies no overlap:
     #   0x1000: page allocator bitmap
@@ -1713,7 +1725,7 @@ func initialize_ports() {
 ### 18.1 Preconditions and Postconditions
 
 ```aether
-func withdraw(account ref Account, amount u64) u64
+func withdraw(account: ref Account, amount: u64): u64
     pre(account.balance >= amount, "insufficient funds")
     post(account.balance == old(account.balance) - amount)
     post(result == amount)
