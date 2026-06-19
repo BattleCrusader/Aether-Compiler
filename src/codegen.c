@@ -1249,6 +1249,14 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
         }
 
+        case NODE_RUN_BLOCK: {
+            /* #run blocks execute at compile time — no runtime code generated.
+             * The body is evaluated during semantic analysis for constant folding.
+             * At codegen time, we emit nothing (the results were already embedded). */
+            cg_comment(cg, "#run block (compile-time only)");
+            break;
+        }
+
         case NODE_THROW: {
             /* throw expr — evaluate the expression, set error tag to 1,
              * emit defers/auto-drops, then return.
