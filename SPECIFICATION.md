@@ -473,7 +473,97 @@ struct Point {
 
 The compiler may inline expression-bodied functions more aggressively since they have no local variables or complex control flow.
 
-### 5.4 Multiple Return Values
+### 5.4 Inline Functions
+
+Aether provides three levels of inlining control, from hints to hard directives:
+
+| Syntax | Meaning |
+|--------|---------|
+| `inline func` | Hint — compiler may inline at its discretion |
+| `@force_inline` | Directive — always inline, error if impossible |
+| `@no_inline` | Directive — never inline |
+
+#### 5.4.1 `inline` — Inlining Hint
+
+The `inline` modifier is a suggestion. The compiler inlines when it estimates the result is smaller or faster, but may ignore the hint for large functions, recursive functions, or when optimization is disabled.
+
+```aether
+# Small accessor — good candidate for inlining
+inline func get_x(self: ref Point): int -> self.x
+
+# Hot math function
+inline func clamp(value: int, min: int, max: int): int {
+    if value < min { return min }
+    if value > max { return max }
+    return value
+}
+
+# Expression-bodied functions pair naturally with inline
+pub inline func is_zero(x: int): bool -> x == 0
+```
+
+#### 5.4.2 `@force_inline` — Mandatory Inlining
+
+The `@force_inline` attribute forces the compiler to inline the function at every call site. If inlining is impossible (recursive, too large, function pointer taken), the compiler emits an error.
+
+```aether
+@force_inline
+func dma_copy(src: ptr u64, dst: ptr u64, count: u64) {
+    asm { rep movsq }
+}
+
+@force_inline
+func read_cr0(): u64 {
+    let value: u64
+    asm: (value) { mov [value], cr0 }
+    return value
+}
+```
+
+Use `@force_inline` for:
+- Interrupt handlers and hot paths where call overhead is unacceptable
+- Hardware register access (port I/O, MSR reads/writes)
+- DMA operations and memory barriers
+- Functions that must execute in a specific caller context (e.g., no stack frame)
+
+#### 5.4.3 `@no_inline` — Prevent Inlining
+
+The `@no_inline` attribute prevents the compiler from inlining the function. This is useful for debugging, stack-sensitive code, or when you need a consistent call frame.
+
+```aether
+@no_inline
+func debug_log(msg: string) {
+    serial_puts(msg)
+}
+
+@no_inline
+func stack_depth_check(): u64 {
+    let rsp: u64
+    asm: (rsp) { mov [rsp], rsp }
+    return rsp
+}
+```
+
+Use `@no_inline` for:
+- Debug logging (preserves call stack in crash dumps)
+- Stack depth measurement
+- Functions with large local arrays (avoid stack frame bloat at call sites)
+- Functions whose address is taken and called through a pointer
+
+#### 5.4.4 Inlining and Expression-Bodied Functions
+
+Expression-bodied functions (§5.3) are particularly good inlining candidates since they have no local variables, no complex control flow, and no hidden side effects:
+
+```aether
+# These are almost always inlined
+inline func add(a: int, b: int): int -> a + b
+inline func negate(x: int): int -> -x
+inline func is_positive(x: int): bool -> x > 0
+```
+
+The compiler treats `inline func name(): type -> expr` as a strong hint that the function is a thin wrapper and should be inlined aggressively.
+
+### 5.5 Multiple Return Values
 
 ```aether
 func divmod(a: int, b: int): (int, int) {
@@ -484,7 +574,7 @@ let (q, r) = divmod(17, 5)
 let result = divmod(17, 5)
 ```
 
-### 5.4 Named Returns
+### 5.5 Named Returns
 
 ```aether
 func divide(a: int, b: int): (quotient: int, remainder: int) {

@@ -76,6 +76,47 @@ func multiply(a: int, b: int): int {
 }
 ```
 
+#### Expression-Bodied Functions
+
+When a function body is a single expression, use `->` shorthand instead of a block:
+
+```aether
+func add(a: int, b: int): int -> a + b
+func square(x: int): int -> x * x
+func is_even(x: int): bool -> x % 2 == 0
+```
+
+The `->` reads as **"evaluates to"** — no `return` keyword, no block braces.
+
+#### Inline Functions
+
+Three levels of inlining control:
+
+| Syntax | Meaning |
+|--------|---------|
+| `inline func` | Hint — compiler may inline at its discretion |
+| `@force_inline` | Directive — always inline, error if impossible |
+| `@no_inline` | Directive — never inline |
+
+```aether
+# Inlining hint — small accessor
+inline func get_x(self: ref Point): int -> self.x
+
+# Mandatory inlining — hot path, hardware access
+@force_inline
+func dma_copy(src: ptr u64, dst: ptr u64, count: u64) {
+    asm { rep movsq }
+}
+
+# Prevent inlining — debug logging, stack-sensitive code
+@no_inline
+func debug_log(msg: string) {
+    serial_puts(msg)
+}
+```
+
+Expression-bodied functions pair naturally with `inline` — the compiler treats `inline func name(): type -> expr` as a strong hint that the function is a thin wrapper and should be inlined aggressively.
+
 ### 2.4 Types
 
 | Category | Examples |
