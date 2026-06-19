@@ -32,7 +32,7 @@
 - [x] P01.13 — Self-Host Test Suite Expansion 🟢
 - [x] P01.14 — Phase 1 Verification & Cleanup 🟢
 
-## Phase 2 — Host-Native Output (PRIORITY) 🟢 P02.01-P02.08 COMPLETE
+## Phase 2 — Host-Native Output 🟢 COMPLETE
 - [x] Target enum + codegen.h types 🟢
 - [x] `--target` CLI flag (host, x86_64-freestanding, macho64, elf64-host) 🟢
 - [x] `codegen_set_target()` / `codegen_detect_host()` 🟢
@@ -43,10 +43,10 @@
 - [x] Host-native `print()` built-in with macOS write syscall 🟢
 - [x] String literal processing (strip quotes, decode escapes) 🟢
 - [x] `aether run <file.ae>` — compile + execute in one step 🟢
-- [x] Host-native test runner — `make test-host` (7/7 passing) 🟢
+- [x] Host-native test runner — `make test-host` (13/13 passing) 🟢
 - [ ] `aether.toml` target configuration
 
-## Phase 3 — Memory Management 🟢 P03.01-P03.07 COMPLETE
+## Phase 3 — Memory Management 🟢 COMPLETE
 - [x] P03.01 — `defer` — scope-exit execution (LIFO order, return-safe) 🟢
 - [x] P03.02 — `heap` — explicit heap allocation via mmap syscall 🟢
 - [x] P03.03 — Bump allocator runtime (64KB arena, O(1), auto-grow) 🟢
@@ -55,7 +55,7 @@
 - [x] P03.06 — Optional types `T?` with `none` 🟢
 - [x] P03.07 — Phase 3 Verification (14/14 unit, 10/10 native, both targets) 🟢
 
-## Phase 4 — OOP and Type System 🟢 P04.01-P04.08 COMPLETE
+## Phase 4 — OOP and Type System 🟢 COMPLETE
 - [x] P04.01 — Struct methods: parsing, self keyword, field access in methods 🟢
 - [x] P04.02 — Classes: `class` keyword, NODE_CLASS_DECL, treats class as struct 🟢
 - [x] P04.03 — Auto-destructor insertion: AutoDrop list, default drop stubs, forward-ref fix 🟢
@@ -66,30 +66,33 @@
 - [x] P04.08 — Phase 4 Verification (16/16 + 14/14 unit, 13/13 native, both targets) 🟢
 
 ## Phase 5 — Advanced Language Features 🔴 NOT STARTED
-- [ ] Exception handling: `try`/`throw`/`catch`
-- [ ] Custom error types
-- [ ] Deterministic exceptions (tagged union return, no unwinding tables)
-- [ ] Zero-cost happy path for exceptions
-- [ ] Compile-time execution: `#run { ... }` blocks
-- [ ] Compile-time constant evaluation
-- [ ] Contract programming: `pre(expr)` and `post(expr)` on functions
-- [ ] Debug-build runtime contract checking
-- [ ] Release-build contract elimination (optimizer hints)
-- [ ] Closures and lambdas: `|args| expr`
-- [ ] Properties: `get`/`set` syntactic sugar
-- [ ] Operator overloading
+- [ ] P05.01 — Exception handling: `try`/`throw`/`catch` parsing and codegen
+- [ ] P05.02 — Custom error types (enum-based error hierarchy)
+- [ ] P05.03 — Deterministic exceptions (tagged union return, no unwinding tables)
+- [ ] P05.04 — Zero-cost happy path for exceptions
+- [ ] P05.05 — Compile-time execution: `#run { ... }` blocks
+- [ ] P05.06 — Compile-time constant evaluation
+- [ ] P05.07 — Contract programming: `pre(expr)` and `post(expr)` on functions
+- [ ] P05.08 — Debug-build runtime contract checking
+- [ ] P05.09 — Release-build contract elimination (optimizer hints)
+- [ ] P05.10 — Closures and lambdas: `|args| expr`
+- [ ] P05.11 — Properties: `get`/`set` syntactic sugar
+- [ ] P05.12 — Operator overloading
+- [ ] P05.13 — Generics monomorphization (duplicate code per concrete type)
+- [ ] P05.14 — Dynamic dispatch (`dyn Trait` — fat pointer + vtable)
+- [ ] P05.15 — Semantic enforcement of access modifiers at module boundaries
 
 ## Phase 6 — Aether OS Integration 🔴 NOT STARTED
-- [ ] `sys func` keyword — direct syscall page calls (0x5000 table)
-- [ ] `module` keyword — generates kernel module `.ko` ELF
-- [ ] `@export` attribute — marks symbols for module loader
-- [ ] `@entry(addr)` attribute — sets binary/userland entry point
-- [ ] `@layout(start, max, file)` — boot-stage layout directives
-- [ ] `@kernel_layout` — compiler-aware memory map verification
-- [ ] `@module_abi(version)` — ABI compliance checking
-- [ ] Declarative resources: `pool`, `protocol` keywords
-- [ ] Target-specific code generation (kernel vs binary vs module)
-- [ ] Freestanding standard library (StdAether):
+- [ ] P06.01 — `sys func` keyword — direct syscall page calls (0x5000 table)
+- [ ] P06.02 — `module` keyword — generates kernel module `.ko` ELF
+- [ ] P06.03 — `@export` attribute — marks symbols for module loader
+- [ ] P06.04 — `@entry(addr)` attribute — sets binary/userland entry point
+- [ ] P06.05 — `@layout(start, max, file)` — boot-stage layout directives
+- [ ] P06.06 — `@kernel_layout` — compiler-aware memory map verification
+- [ ] P06.07 — `@module_abi(version)` — ABI compliance checking
+- [ ] P06.08 — Declarative resources: `pool`, `protocol` keywords
+- [ ] P06.09 — Target-specific code generation (kernel vs binary vs module)
+- [ ] P06.10 — Freestanding standard library (StdAether):
   - [ ] `std.io` — `print`, `println`, `format`
   - [ ] `std.mem` — `Pool`, `Arena`, `copy`, `zero`
   - [ ] `std.str` — `String`, `concat`, `split`
@@ -100,40 +103,54 @@
   - [ ] `std.elf` — ELF64 reader/writer
   - [ ] `std.test` — `assert`, test runner
   - [ ] `std.asm` — NASM helper macros
-- [ ] Linker script integration
-- [ ] Project manifest: `aether.toml` support
+  - [ ] `std.arch` — architecture detection and multi-target helpers
+- [ ] P06.11 — Linker script integration
+- [ ] P06.12 — Project manifest: `aether.toml` support
 
 ## Phase 7 — Self-Hosting 🔴 NOT STARTED
-- [ ] Compiler can compile its own tokenizer/lexer
-- [ ] Compiler can compile its own parser
-- [ ] Compiler can compile its own AST/semantic analysis
-- [ ] Compiler can compile its own IR generation
-- [ ] Compiler can compile its own code generation
-- [ ] Compiler can compile its own ELF64 writer
-- [ ] Full bootstrap: Aether compiler runs on Aether OS
-- [ ] Compiler can compile itself with no C bootstrap
-- [ ] C bootstrap source archived as historical reference only
+- [ ] P07.01 — Compiler can compile its own tokenizer/lexer
+- [ ] P07.02 — Compiler can compile its own parser
+- [ ] P07.03 — Compiler can compile its own AST/semantic analysis
+- [ ] P07.04 — Compiler can compile its own IR generation
+- [ ] P07.05 — Compiler can compile its own code generation
+- [ ] P07.06 — Compiler can compile its own ELF64 writer
+- [ ] P07.07 — Full bootstrap: Aether compiler runs on Aether OS
+- [ ] P07.08 — Compiler can compile itself with no C bootstrap
+- [ ] P07.09 — C bootstrap source archived as historical reference only
 
-## Phase 8 — Optimization & Polish 🔴 NOT STARTED
-- [ ] Constant folding and propagation
-- [ ] Dead code elimination
-- [ ] Aggressive inlining (especially generics)
-- [ ] Escape analysis-based heap/stack promotion
-- [ ] Region inference → arena elision optimization
-- [ ] Devirtualization (static dispatch where possible)
-- [ ] Loop unrolling and optimization
-- [ ] Memory operation fusion
-- [ ] MIR-to-LIR code generation
-- [ ] Register allocation (linear scan or graph coloring)
-- [ ] Instruction selection (x86_64 NASM emission)
-- [ ] `aether fmt` — source code formatter
-- [ ] `aether doc` — documentation generator
-- [ ] `aether asm` — show generated assembly listing
-- [ ] `aether inspect` — ELF binary inspection tool
-- [ ] LSP server for editor support
-- [ ] Syntax highlighting (VS Code, Vim, Helix)
-- [ ] Actionable, empathetic error messages with suggested fixes
-- [ ] Performance benchmarking suite
+## Phase 8 — Multi-Target Assembler 🔴 NOT STARTED
+- [ ] P08.01 — NASM IR definition (instruction set, register file, addressing modes)
+- [ ] P08.02 — NASM parser (extract instructions, operands, directives from asm blocks)
+- [ ] P08.03 — x86_64 backend (passthrough — direct NASM emission)
+- [ ] P08.04 — ARM64 backend (instruction mapping table)
+- [ ] P08.05 — RISC-V backend (instruction mapping table)
+- [ ] P08.06 — Register translation layer (NASM regs → target regs)
+- [ ] P08.07 — Addressing mode translation
+- [ ] P08.08 — Directive translation (align, section, etc.)
+- [ ] P08.09 — Pseudo-instruction expansion
+- [ ] P08.10 — Multi-target test suite (same NASM source → multiple architectures)
+- [ ] P08.11 — Integration with `--target` CLI flag
+
+## Phase 9 — Optimization & Polish 🔴 NOT STARTED
+- [ ] P09.01 — Constant folding and propagation
+- [ ] P09.02 — Dead code elimination
+- [ ] P09.03 — Aggressive inlining (especially generics)
+- [ ] P09.04 — Escape analysis-based heap/stack promotion
+- [ ] P09.05 — Region inference → arena elision optimization
+- [ ] P09.06 — Devirtualization (static dispatch where possible)
+- [ ] P09.07 — Loop unrolling and optimization
+- [ ] P09.08 — Memory operation fusion
+- [ ] P09.09 — MIR-to-LIR code generation
+- [ ] P09.10 — Register allocation (linear scan or graph coloring)
+- [ ] P09.11 — Instruction selection (x86_64 NASM emission)
+- [ ] P09.12 — `aether fmt` — source code formatter
+- [ ] P09.13 — `aether doc` — documentation generator
+- [ ] P09.14 — `aether asm` — show generated assembly listing
+- [ ] P09.15 — `aether inspect` — ELF binary inspection tool
+- [ ] P09.16 — LSP server for editor support
+- [ ] P09.17 — Syntax highlighting (VS Code, Vim, Helix)
+- [ ] P09.18 — Actionable, empathetic error messages with suggested fixes
+- [ ] P09.19 — Performance benchmarking suite
 
 ---
 
@@ -151,19 +168,25 @@
 
 ## Priority Queue (Next to Build)
 
-1. **Phase 0**: Tokenizer in C → Parser in C → AST
-2. **Phase 1**: Core language features, ELF64 output, hello.ae on QEMU
-3. **Phase 2**: Host-native output — compile and run `.ae` on macOS/Linux natively ✅
+1. **Phase 0**: Bootstrap toolchain ✅
+2. **Phase 1**: Core language features, ELF64 output ✅
+3. **Phase 2**: Host-native output ✅
 4. **Phase 3**: Memory management — defer, heap, regions, optionals ✅
-5. **Phase 4**: OOP and type system — classes, traits, generics, closures ✅
-6. **Phase 5**: Advanced language features — exceptions, compile-time, contracts
+5. **Phase 4**: OOP and type system — classes, traits, generics ✅
+6. **Phase 5**: Advanced language features — exceptions, compile-time, contracts, closures, monomorphization, dynamic dispatch
+7. **Phase 6**: Aether OS integration — sys func, module, attributes, stdlib
+8. **Phase 7**: Self-hosting — compiler compiles itself
+9. **Phase 8**: Multi-target assembler — NASM → ARM64/RISC-V translation
+10. **Phase 9**: Optimization & polish — fmt, doc, LSP, benchmarks
+
 ---
 
 ## Known Technical Decisions
 
 - **Bootstrap language**: C11 freestanding (matches Aether OS kernel)
-- **Output**: ELF64 flat binary for freestanding; Mach-O 64 (macOS) or native ELF64 (Linux) for host-native — **Phase 2 priority**
+- **Output**: ELF64 flat binary for freestanding; Mach-O 64 (macOS) or native ELF64 (Linux) for host-native
 - **Assembly**: NASM syntax only, integrated assembler in compiler
+- **Multi-target assembler**: NASM syntax parsed into an intermediate IR, then translated to target architecture (x86_64 passthrough, ARM64/RISC-V via instruction mapping tables). Pluggable backend architecture.
 - **Memory model**: Stack-first with escape analysis; explicit `heap` keyword
 - **Exceptions**: Tagged union return encoding, no personality/unwind tables
 - **Generics**: Monomorphization (zero-cost, like Rust/C++)

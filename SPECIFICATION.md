@@ -1535,6 +1535,147 @@ func write_cr3(value: u64) {
 }
 ```
 
+### 15.6 Multi-Target Assembly (NASM Translation Layer)
+
+The compiler supports writing assembly in NASM syntax and translating it to the target architecture's native assembly. This means you write NASM once and the compiler emits the correct instructions for x86_64, ARM64, or RISC-V.
+
+#### 15.6.1 Architecture
+
+```
+NASM asm block → NASM Parser → NASM IR → Target Backend → Native Assembly
+                                          ├── x86_64 (passthrough)
+                                          ├── ARM64 (instruction mapping)
+                                          └── RISC-V (instruction mapping)
+```
+
+The NASM IR is an intermediate representation of the assembly: instructions, operands, registers, labels, and directives. Each target backend maps this IR to the target's native assembly syntax.
+
+#### 15.6.2 NASM IR
+
+The NASM IR captures the full semantics of a NASM assembly block:
+
+```aether
+# Internal representation (not user-visible):
+# NasmInstruction { mnemonic: string, operands: [NasmOperand], ... }
+# NasmOperand = Register | Immediate | Memory | Label | ...
+```
+
+Instructions are parsed into this IR regardless of target. The backend then decides how to emit each instruction.
+
+#### 15.6.3 x86_64 Backend (Passthrough)
+
+The x86_64 backend emits NASM instructions directly — it's a passthrough. This is the default and matches current behavior.
+
+```aether
+# x86_64: direct NASM emission
+func outb(port: u16, value: byte) {
+    asm {
+        mov dx, port      # → mov dx, [rbp-8]
+        mov al, value     # → mov al, [rbp-12]
+        out dx, al        # → out dx, al
+    }
+}
+```
+
+#### 15.6.4 ARM64 Backend
+
+The ARM64 backend translates NASM instructions to ARM64 equivalents:
+
+| NASM (x86_64) | ARM64 Translation |
+|---------------|-------------------|
+| `mov rax, rbx` | `MOV X0, X1` |
+| `add rax, 42` | `ADD X0, X0, #42` |
+| `sub rsp, 16` | `SUB SP, SP, #16` |
+| `push rax` | `STR X0, [SP, #-16]!` |
+| `pop rax` | `LDR X0, [SP], #16` |
+| `call func` | `BL func` |
+| `jmp label` | `B label` |
+| `je label` | `B.EQ label` |
+| `cmp rax, 0` | `CMP X0, #0` |
+| `ret` | `RET` |
+| `mov [rax], rbx` | `STR X1, [X0]` |
+| `mov rax, [rbx]` | `LDR X0, [X1]` |
+| `lgdt [ptr]` | System register write (GDT via `MSR` equivalents) |
+| `out dx, al` | Memory-mapped I/O via `STR` |
+| `in al, dx` | Memory-mapped I/O via `LDR` |
+
+Register mapping:
+- `rax` → `X0`, `rbx` → `X1`, `rcx` → `X2`, `rdx` → `X3`
+- `rsi` → `X4`, `rdi` → `X5`, `rsp` → `SP`, `rbp` → `X29`
+- `r8`-`r15` → `X6`-`X13`
+- `eax` → `W0`, `ebx` → `W1`, etc. (32-bit views)
+
+#### 15.6.5 RISC-V Backend
+
+The RISC-V backend translates NASM instructions to RISC-V equivalents:
+
+| NASM (x86_64) | RISC-V Translation |
+|---------------|-------------------|
+| `mov rax, rbx` | `MV a0, a1` |
+| `add rax, 42` | `ADDI a0, a0, 42` |
+| `sub rsp, 16` | `ADDI sp, sp, -16` |
+| `push rax` | `ADDI sp, sp, -16; SD a0, 0(sp)` |
+| `pop rax` | `LD a0, 0(sp); ADDI sp, sp, 16` |
+| `call func` | `JAL ra, func` |
+| `jmp label` | `J label` |
+| `je label` | `BEQ t0, t1, label` (requires comparison first) |
+| `cmp rax, 0` | `BEQZ a0, label` |
+| `ret` | `RET` (alias for `JALR zero, ra, 0`) |
+| `mov [rax], rbx` | `SD a1, 0(a0)` |
+| `mov rax, [rbx]` | `LD a0, 0(a1)` |
+
+Register mapping:
+- `rax` → `a0`, `rbx` → `a1`, `rcx` → `a2`, `rdx` → `a3`
+- `rsi` → `a4`, `rdi` → `a5`, `rsp` → `sp`, `rbp` → `s0`
+- `r8`-`r15` → `a6`-`a7`, `s1`-`s6`
+
+#### 15.6.6 Selecting the Target Architecture
+
+The target architecture for assembly translation is selected via the `--target` flag:
+
+```
+aether build --target x86_64-freestanding    # NASM passthrough (default)
+aether build --target aarch64-freestanding   # NASM → ARM64 translation
+aether build --target riscv64-freestanding    # NASM → RISC-V translation
+```
+
+The `aether.toml` manifest also supports architecture selection:
+
+```toml
+[build]
+target = "aarch64-freestanding"
+arch = "arm64"
+```
+
+#### 15.6.7 Architecture-Detection Builtins
+
+The compiler provides built-in functions for conditional compilation based on target architecture:
+
+```aether
+# Compile-time architecture detection
+#run {
+    if arch() == "x86_64" {
+        emit('const CACHE_LINE_SIZE = 64')
+    } elif arch() == "arm64" {
+        emit('const CACHE_LINE_SIZE = 128')
+    } elif arch() == "riscv64" {
+        emit('const CACHE_LINE_SIZE = 64')
+    }
+}
+
+# Runtime architecture detection
+func is_x86_64(): bool {
+    return arch() == "x86_64"
+}
+```
+
+#### 15.6.8 Limitations
+
+- Not all NASM instructions have direct equivalents on ARM64/RISC-V. Some require multi-instruction sequences (e.g., `lgdt`, `out`/`in`, `cpuid`).
+- Pseudo-instructions (`times`, `resb`, `equ`) are expanded or mapped to target equivalents.
+- Directives (`[org 0x7C00]`, `[bits 64]`) are target-specific and may need manual adjustment.
+- The translation layer is a best-effort mapping — for maximum control, use target-specific `asm` blocks with `#if arch()` guards.
+
 ---
 
 ## 16. Aether OS Integration
