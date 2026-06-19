@@ -430,11 +430,140 @@ func multiply(a: int, b: int): int {
 ```aether
 # Function declaration syntax:
 #   func name(param: type, ...): return_type { body }
+#   func name(param: type, ...): return_type -> expr   (expression body)
 # Parameters use colon syntax: name: type
 # Return type uses colon syntax: : type (after the closing paren)
 ```
 
-### 5.3 Multiple Return Values
+### 5.3 Expression-Bodied Functions
+
+When a function body is a single expression, you can use the `->` shorthand instead of a block `{ }`. The expression after `->` is evaluated and returned automatically — no `return` keyword needed.
+
+```aether
+# Block body — explicit return
+func add(a: int, b: int): int {
+    return a + b
+}
+
+# Expression body — implicit return via ->
+func add(a: int, b: int): int -> a + b
+
+# Works with any expression
+func square(x: int): int -> x * x
+func negate(x: int): int -> -x
+func is_even(x: int): bool -> x % 2 == 0
+func greet(name: string): string -> "Hello, {name}!"
+func max(a: int, b: int): int -> if a > b { a } else { b }
+```
+
+The `->` reads as **"evaluates to"** — `func add(a: int, b: int): int -> a + b` means "add takes two ints, returns an int, and evaluates to a + b."
+
+Expression-bodied functions compose naturally with other modifiers:
+
+```aether
+pub inline func fast_abs(x: int): int -> if x < 0 { -x } else { x }
+
+# Useful for simple getters/properties on structs
+struct Point {
+    x: int
+    y: int
+    func magnitude(self): float -> sqrt(f32(self.x * self.x + self.y * self.y))
+}
+```
+
+The compiler may inline expression-bodied functions more aggressively since they have no local variables or complex control flow.
+
+### 5.4 Inline Functions
+
+Aether provides three levels of inlining control, from hints to hard directives:
+
+| Syntax | Meaning |
+|--------|---------|
+| `inline func` | Hint — compiler may inline at its discretion |
+| `@force_inline` | Directive — always inline, error if impossible |
+| `@no_inline` | Directive — never inline |
+
+#### 5.4.1 `inline` — Inlining Hint
+
+The `inline` modifier is a suggestion. The compiler inlines when it estimates the result is smaller or faster, but may ignore the hint for large functions, recursive functions, or when optimization is disabled.
+
+```aether
+# Small accessor — good candidate for inlining
+inline func get_x(self: ref Point): int -> self.x
+
+# Hot math function
+inline func clamp(value: int, min: int, max: int): int {
+    if value < min { return min }
+    if value > max { return max }
+    return value
+}
+
+# Expression-bodied functions pair naturally with inline
+pub inline func is_zero(x: int): bool -> x == 0
+```
+
+#### 5.4.2 `@force_inline` — Mandatory Inlining
+
+The `@force_inline` attribute forces the compiler to inline the function at every call site. If inlining is impossible (recursive, too large, function pointer taken), the compiler emits an error.
+
+```aether
+@force_inline
+func dma_copy(src: ptr u64, dst: ptr u64, count: u64) {
+    asm { rep movsq }
+}
+
+@force_inline
+func read_cr0(): u64 {
+    let value: u64
+    asm: (value) { mov [value], cr0 }
+    return value
+}
+```
+
+Use `@force_inline` for:
+- Interrupt handlers and hot paths where call overhead is unacceptable
+- Hardware register access (port I/O, MSR reads/writes)
+- DMA operations and memory barriers
+- Functions that must execute in a specific caller context (e.g., no stack frame)
+
+#### 5.4.3 `@no_inline` — Prevent Inlining
+
+The `@no_inline` attribute prevents the compiler from inlining the function. This is useful for debugging, stack-sensitive code, or when you need a consistent call frame.
+
+```aether
+@no_inline
+func debug_log(msg: string) {
+    serial_puts(msg)
+}
+
+@no_inline
+func stack_depth_check(): u64 {
+    let rsp: u64
+    asm: (rsp) { mov [rsp], rsp }
+    return rsp
+}
+```
+
+Use `@no_inline` for:
+- Debug logging (preserves call stack in crash dumps)
+- Stack depth measurement
+- Functions with large local arrays (avoid stack frame bloat at call sites)
+- Functions whose address is taken and called through a pointer
+
+#### 5.4.4 Inlining and Expression-Bodied Functions
+
+Expression-bodied functions (§5.3) are particularly good inlining candidates since they have no local variables, no complex control flow, and no hidden side effects:
+
+```aether
+# These are almost always inlined
+inline func add(a: int, b: int): int -> a + b
+inline func negate(x: int): int -> -x
+inline func is_positive(x: int): bool -> x > 0
+```
+
+The compiler treats `inline func name(): type -> expr` as a strong hint that the function is a thin wrapper and should be inlined aggressively.
+
+### 5.5 Multiple Return Values
 
 ```aether
 func divmod(a: int, b: int): (int, int) {
@@ -445,7 +574,7 @@ let (q, r) = divmod(17, 5)
 let result = divmod(17, 5)
 ```
 
-### 5.4 Named Returns
+### 5.5 Named Returns
 
 ```aether
 func divide(a: int, b: int): (quotient: int, remainder: int) {
@@ -1534,6 +1663,147 @@ func write_cr3(value: u64) {
     }
 }
 ```
+
+### 15.6 Multi-Target Assembly (NASM Translation Layer)
+
+The compiler supports writing assembly in NASM syntax and translating it to the target architecture's native assembly. This means you write NASM once and the compiler emits the correct instructions for x86_64, ARM64, or RISC-V.
+
+#### 15.6.1 Architecture
+
+```
+NASM asm block → NASM Parser → NASM IR → Target Backend → Native Assembly
+                                          ├── x86_64 (passthrough)
+                                          ├── ARM64 (instruction mapping)
+                                          └── RISC-V (instruction mapping)
+```
+
+The NASM IR is an intermediate representation of the assembly: instructions, operands, registers, labels, and directives. Each target backend maps this IR to the target's native assembly syntax.
+
+#### 15.6.2 NASM IR
+
+The NASM IR captures the full semantics of a NASM assembly block:
+
+```aether
+# Internal representation (not user-visible):
+# NasmInstruction { mnemonic: string, operands: [NasmOperand], ... }
+# NasmOperand = Register | Immediate | Memory | Label | ...
+```
+
+Instructions are parsed into this IR regardless of target. The backend then decides how to emit each instruction.
+
+#### 15.6.3 x86_64 Backend (Passthrough)
+
+The x86_64 backend emits NASM instructions directly — it's a passthrough. This is the default and matches current behavior.
+
+```aether
+# x86_64: direct NASM emission
+func outb(port: u16, value: byte) {
+    asm {
+        mov dx, port      # → mov dx, [rbp-8]
+        mov al, value     # → mov al, [rbp-12]
+        out dx, al        # → out dx, al
+    }
+}
+```
+
+#### 15.6.4 ARM64 Backend
+
+The ARM64 backend translates NASM instructions to ARM64 equivalents:
+
+| NASM (x86_64) | ARM64 Translation |
+|---------------|-------------------|
+| `mov rax, rbx` | `MOV X0, X1` |
+| `add rax, 42` | `ADD X0, X0, #42` |
+| `sub rsp, 16` | `SUB SP, SP, #16` |
+| `push rax` | `STR X0, [SP, #-16]!` |
+| `pop rax` | `LDR X0, [SP], #16` |
+| `call func` | `BL func` |
+| `jmp label` | `B label` |
+| `je label` | `B.EQ label` |
+| `cmp rax, 0` | `CMP X0, #0` |
+| `ret` | `RET` |
+| `mov [rax], rbx` | `STR X1, [X0]` |
+| `mov rax, [rbx]` | `LDR X0, [X1]` |
+| `lgdt [ptr]` | System register write (GDT via `MSR` equivalents) |
+| `out dx, al` | Memory-mapped I/O via `STR` |
+| `in al, dx` | Memory-mapped I/O via `LDR` |
+
+Register mapping:
+- `rax` → `X0`, `rbx` → `X1`, `rcx` → `X2`, `rdx` → `X3`
+- `rsi` → `X4`, `rdi` → `X5`, `rsp` → `SP`, `rbp` → `X29`
+- `r8`-`r15` → `X6`-`X13`
+- `eax` → `W0`, `ebx` → `W1`, etc. (32-bit views)
+
+#### 15.6.5 RISC-V Backend
+
+The RISC-V backend translates NASM instructions to RISC-V equivalents:
+
+| NASM (x86_64) | RISC-V Translation |
+|---------------|-------------------|
+| `mov rax, rbx` | `MV a0, a1` |
+| `add rax, 42` | `ADDI a0, a0, 42` |
+| `sub rsp, 16` | `ADDI sp, sp, -16` |
+| `push rax` | `ADDI sp, sp, -16; SD a0, 0(sp)` |
+| `pop rax` | `LD a0, 0(sp); ADDI sp, sp, 16` |
+| `call func` | `JAL ra, func` |
+| `jmp label` | `J label` |
+| `je label` | `BEQ t0, t1, label` (requires comparison first) |
+| `cmp rax, 0` | `BEQZ a0, label` |
+| `ret` | `RET` (alias for `JALR zero, ra, 0`) |
+| `mov [rax], rbx` | `SD a1, 0(a0)` |
+| `mov rax, [rbx]` | `LD a0, 0(a1)` |
+
+Register mapping:
+- `rax` → `a0`, `rbx` → `a1`, `rcx` → `a2`, `rdx` → `a3`
+- `rsi` → `a4`, `rdi` → `a5`, `rsp` → `sp`, `rbp` → `s0`
+- `r8`-`r15` → `a6`-`a7`, `s1`-`s6`
+
+#### 15.6.6 Selecting the Target Architecture
+
+The target architecture for assembly translation is selected via the `--target` flag:
+
+```
+aether build --target x86_64-freestanding    # NASM passthrough (default)
+aether build --target aarch64-freestanding   # NASM → ARM64 translation
+aether build --target riscv64-freestanding    # NASM → RISC-V translation
+```
+
+The `aether.toml` manifest also supports architecture selection:
+
+```toml
+[build]
+target = "aarch64-freestanding"
+arch = "arm64"
+```
+
+#### 15.6.7 Architecture-Detection Builtins
+
+The compiler provides built-in functions for conditional compilation based on target architecture:
+
+```aether
+# Compile-time architecture detection
+#run {
+    if arch() == "x86_64" {
+        emit('const CACHE_LINE_SIZE = 64')
+    } elif arch() == "arm64" {
+        emit('const CACHE_LINE_SIZE = 128')
+    } elif arch() == "riscv64" {
+        emit('const CACHE_LINE_SIZE = 64')
+    }
+}
+
+# Runtime architecture detection
+func is_x86_64(): bool {
+    return arch() == "x86_64"
+}
+```
+
+#### 15.6.8 Limitations
+
+- Not all NASM instructions have direct equivalents on ARM64/RISC-V. Some require multi-instruction sequences (e.g., `lgdt`, `out`/`in`, `cpuid`).
+- Pseudo-instructions (`times`, `resb`, `equ`) are expanded or mapped to target equivalents.
+- Directives (`[org 0x7C00]`, `[bits 64]`) are target-specific and may need manual adjustment.
+- The translation layer is a best-effort mapping — for maximum control, use target-specific `asm` blocks with `#if arch()` guards.
 
 ---
 
