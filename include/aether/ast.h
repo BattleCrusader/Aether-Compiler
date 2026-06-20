@@ -34,6 +34,8 @@ typedef enum {
     NODE_TRAIT_DECL,
     NODE_IMPL_BLOCK,
     NODE_CLASS_DECL,
+    NODE_POOL_DECL,
+    NODE_PROTOCOL_DECL,
 
     /* Statements */
     NODE_BLOCK,
@@ -397,7 +399,31 @@ typedef struct {
     bool has_layout_max;
     int64_t layout_max;
     StringView layout_file; /* empty if not set */
+    /* @module_abi(version=N) params */
+    bool has_module_abi;
+    int64_t module_abi_version; /* ABI version from @module_abi(version=N), -1 if not set */
 } AttrData;
+
+/* Module declaration */
+typedef struct {
+    AstNode *name;          /* ident node for the module name */
+    AstNodeList body;       /* declarations inside the module body */
+    int module_abi_version; /* ABI version from @module_abi(version=N), -1 if unset */
+} ModuleDecl;
+
+/* Pool declaration: pool Name of size N, count M, alignment A */
+typedef struct {
+    AstNode *name;          /* pool name */
+    uint64_t size;          /* element size */
+    uint64_t count;         /* number of elements */
+    uint64_t alignment;     /* alignment requirement (0 = default) */
+} PoolDecl;
+
+/* Protocol declaration: protocol Name { func_decls } */
+typedef struct {
+    AstNode *name;          /* protocol name */
+    AstNodeList methods;    /* function declarations (signatures only) */
+} ProtocolDecl;
 
 /* ================================================================
  * AST Node structure (tagged union of all the above)
@@ -435,6 +461,9 @@ struct AstNode {
         RegionNode region_node;
         TraitDecl trait_decl;
         ImplBlock impl_block;
+        ModuleDecl module_decl;
+        PoolDecl pool_decl;
+        ProtocolDecl protocol_decl;
         TryNode try_node;
         ThrowNode throw_node;
         CatchArm catch_arm;

@@ -81,6 +81,10 @@ const char *target_name(Target t) {
         case TARGET_MACHO64:      return "Mach-O 64 (macOS)";
         case TARGET_HOST:         return "host (auto-detect)";
         case TARGET_ELF64_HOST:   return "native ELF64 (Linux)";
+        case TARGET_KERNEL:       return "kernel ELF64 (0x1000000)";
+        case TARGET_MODULE:       return "Aether OS module (.ko)";
+        case TARGET_BINARY:       return "Aether OS binary ELF64 (0x2000000)";
+        case TARGET_BOOT:         return "flat binary boot sector";
     }
     return "unknown";
 }
@@ -291,6 +295,7 @@ Codegen *codegen_create(Arena *a) {
     cg->layout_start = 0;
     cg->layout_max = 0;
     cg->layout_file = NULL;
+    cg->linker_script = NULL;
     return cg;
 }
 
@@ -1554,7 +1559,12 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     cg->layout_file = NULL;
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *node = program->data.list.items[i];
-        if (node->type == NODE_FUNC_DECL) {
+        if (node->type == NODE_MODULE_DECL) {
+            /* Emit module ABI version as a comment */
+            if (node->data.module_decl.module_abi_version >= 0) {
+                cg_write_fmt(cg, "; Module ABI version: %d\n", node->data.module_decl.module_abi_version);
+            }
+        } else if (node->type == NODE_FUNC_DECL) {
             if (node->data.func.entry_addr != -1 && !cg->entry_func) {
                 cg->entry_addr = node->data.func.entry_addr;
                 cg->entry_func = arena_strndup(cg->arena,
@@ -1869,6 +1879,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
     char obj_file[1024];
     const char *nasm_format;
     const char *link_cmd_prefix;
+    char ld_cmd_buf[2048]; /* persistent buffer for dynamic linker cmd */
 
     switch (cg->target) {
         case TARGET_MACHO64:
@@ -1881,34 +1892,60 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
             snprintf(obj_file, sizeof(obj_file), "/tmp/aether_host.o");
             link_cmd_prefix = "ld -o";
             break;
+        case TARGET_BOOT:
+            /* Boot sector: flat binary, no linker — handled below */
+            nasm_format = "bin";
+            obj_file[0] = '\0';
+            link_cmd_prefix = NULL;
+            break;
+        case TARGET_KERNEL:
+            nasm_format = "elf64";
+            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_kernel.o");
+            link_cmd_prefix = "";
+            break;
+        case TARGET_MODULE:
+            nasm_format = "elf64";
+            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_module.o");
+            link_cmd_prefix = "";
+            break;
+        case TARGET_BINARY:
+            nasm_format = "elf64";
+            snprintf(obj_file, sizeof(obj_file), "/tmp/aether_binary.o");
+            link_cmd_prefix = "";
+            break;
         default:
             /* Freestanding — use external LD variable */
             nasm_format = "elf64";
             snprintf(obj_file, sizeof(obj_file), "/tmp/aether_host.o");
-            /* Write linker script inline */
-            FILE *ldf = fopen("/tmp/aether_ld.ld", "w");
-            if (ldf) {
-                /* Use @entry address if set, otherwise default to 0x400000 */
-                uint64_t load_addr = (cg->entry_addr > 0) ? (uint64_t)cg->entry_addr : 0x400000;
-                /* Use @entry func name if set, otherwise default to _start */
-                const char *entry_name = cg->entry_func ? cg->entry_func : "_start";
-                fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(%s)\nSECTIONS {\n", entry_name);
-                fprintf(ldf, "  . = 0x%lx;\n", (unsigned long)load_addr);
-                fprintf(ldf, "  .text : { *(.text) *(.text.*) }\n");
-                fprintf(ldf, "  .rodata : { *(.rodata) *(.rodata.*) }\n");
-                fprintf(ldf, "  .data : { *(.data) *(.data.*) }\n");
-                fprintf(ldf, "  .bss : { *(.bss) *(.bss.*) *(COMMON) }\n}\n");
-                fclose(ldf);
+            /* Write linker script inline (or use user-supplied one) */
+            if (cg->linker_script) {
+                snprintf(ld_cmd_buf, sizeof(ld_cmd_buf), LD " -T %s -o", cg->linker_script);
+                link_cmd_prefix = ld_cmd_buf;
+            } else {
+                FILE *ldf = fopen("/tmp/aether_ld.ld", "w");
+                if (ldf) {
+                    /* Use @entry address if set, otherwise default to 0x400000 */
+                    uint64_t load_addr = (cg->entry_addr > 0) ? (uint64_t)cg->entry_addr : 0x400000;
+                    /* Use @entry func name if set, otherwise default to _start */
+                    const char *entry_name = cg->entry_func ? cg->entry_func : "_start";
+                    fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(%s)\nSECTIONS {\n", entry_name);
+                    fprintf(ldf, "  . = 0x%lx;\n", (unsigned long)load_addr);
+                    fprintf(ldf, "  .text : { *(.text) *(.text.*) }\n");
+                    fprintf(ldf, "  .rodata : { *(.rodata) *(.rodata.*) }\n");
+                    fprintf(ldf, "  .data : { *(.data) *(.data.*) }\n");
+                    fprintf(ldf, "  .bss : { *(.bss) *(.bss.*) *(COMMON) }\n}\n");
+                    fclose(ldf);
+                }
+                link_cmd_prefix = LD " -T /tmp/aether_ld.ld -o";
             }
-            link_cmd_prefix = LD " -T /tmp/aether_ld.ld -o";
             break;
     }
 
     /* Step 2: Assemble with nasm */
     char cmd[4096];
 
-    /* If @layout is set, assemble as flat binary — direct output, no linker */
-    if (cg->has_layout) {
+    /* If @layout or TARGET_BOOT, assemble as flat binary — direct output, no linker */
+    if (cg->has_layout || cg->target == TARGET_BOOT) {
         snprintf(cmd, sizeof(cmd), "nasm -f bin -o %s %s", output_file, asm_file);
         int ret = system(cmd);
         if (ret != 0) {
@@ -1942,8 +1979,12 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
     /* Step 3: Link */
     if (cg->target == TARGET_MACHO64) {
         snprintf(cmd, sizeof(cmd), "%s -o %s %s", link_cmd_prefix, output_file, obj_file);
-    } else {
+    } else if (link_cmd_prefix && link_cmd_prefix[0] != '\0') {
         snprintf(cmd, sizeof(cmd), "%s %s %s", link_cmd_prefix, output_file, obj_file);
+    } else {
+        /* No linker step needed (module targets) */
+        /* Just copy object to output */
+        snprintf(cmd, sizeof(cmd), "cp %s %s", obj_file, output_file);
     }
     ret = system(cmd);
     if (ret != 0) {

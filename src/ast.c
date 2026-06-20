@@ -346,6 +346,8 @@ const char *node_type_name(NodeType type) {
         case NODE_TYPE_ALIAS: return "TYPE_ALIAS";
         case NODE_TRAIT_DECL: return "TRAIT_DECL";
         case NODE_IMPL_BLOCK: return "IMPL_BLOCK";
+        case NODE_POOL_DECL: return "POOL_DECL";
+        case NODE_PROTOCOL_DECL: return "PROTOCOL_DECL";
         case NODE_BLOCK: return "BLOCK";
         case NODE_LET: return "LET";
         case NODE_ASSIGN: return "ASSIGN";
