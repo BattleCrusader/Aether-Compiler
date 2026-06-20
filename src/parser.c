@@ -757,15 +757,73 @@ AstNode *parse_statement(Parser *p) {
 
     /* asm block */
     if (parser_match(p, TOKEN_KW_ASM)) {
+        /* Optional output binding: asm: (var1, var2) { ... } */
+        AstNodeList outputs = {0};
+        if (parser_match(p, TOKEN_COLON)) {
+            parser_expect(p, TOKEN_LPAREN, "asm output list");
+            while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                AstNode *var = node_create(p->arena, NODE_IDENT, p->current.loc);
+                if (parser_check(p, TOKEN_IDENT)) {
+                    var->data.ident.name = p->current.text;
+                    parser_advance(p);
+                    node_list_append(&outputs, var);
+                    parser_match(p, TOKEN_COMMA);
+                } else break;
+            }
+            parser_expect(p, TOKEN_RPAREN, "asm output list");
+        }
+
         if (parser_match(p, TOKEN_LBRACE)) {
-            /* Skip tokens until matching } counting brace depth */
+            /* Record the source position right after opening brace */
+            const char *asm_start = p->lexer->tok->pos;
+            const char *asm_end = asm_start;
             int brace_depth = 1;
+            /* Track line/col of the opening brace for error reporting */
+            int start_line = p->previous.loc.line;
+            int start_col = p->previous.loc.col;
+
             while (brace_depth > 0 && !parser_check(p, TOKEN_EOF)) {
                 parser_advance(p);
-                if (p->previous.type == TOKEN_LBRACE) brace_depth++;
-                if (p->previous.type == TOKEN_RBRACE) brace_depth--;
+                asm_end = p->lexer->tok->pos; /* track end after each token */
+                if (p->previous.type == TOKEN_LBRACE) {
+                    brace_depth++;
+                    asm_end = p->lexer->tok->start;
+                }
+                if (p->previous.type == TOKEN_RBRACE) {
+                    brace_depth--;
+                    if (brace_depth == 0) {
+                        /* Calculate end — before the closing } */
+                        asm_end = p->lexer->tok->start;
+                        /* Trim trailing whitespace/newline from asm text */
+                        while (asm_end > asm_start &&
+                               (asm_end[-1] == '\n' || asm_end[-1] == '\r' ||
+                                asm_end[-1] == ' ' || asm_end[-1] == '\t'))
+                            asm_end--;
+                    }
+                }
             }
-            return node_create(p->arena, NODE_ASM_BLOCK, p->previous.loc);
+
+            /* Create the asm block node with captured text */
+            AstNode *node = node_create(p->arena, NODE_ASM_BLOCK, LOCATION(p->lexer->tok->filename, start_line, start_col, 0));
+            /* Store the assembly text as a string literal */
+            if (asm_end > asm_start) {
+                /* Trim trailing closing brace if present */
+                const char *trim_end = asm_end;
+                while (trim_end > asm_start && (trim_end[-1] == ' ' || trim_end[-1] == '\t' || trim_end[-1] == '\n' || trim_end[-1] == '\r'))
+                    trim_end--;
+                if (trim_end > asm_start && trim_end[-1] == '}') {
+                    trim_end--; /* remove the closing } */
+                    /* Trim again after removing brace */
+                    while (trim_end > asm_start && (trim_end[-1] == ' ' || trim_end[-1] == '\t' || trim_end[-1] == '\n' || trim_end[-1] == '\r'))
+                        trim_end--;
+                }
+                if (trim_end > asm_start) {
+                    StringView asm_text = sv_from_parts(asm_start, (size_t)(trim_end - asm_start));
+                    node->data.asm_block.text = node_string_literal(p->arena, NO_LOCATION, asm_text);
+                }
+            }
+            node->data.asm_block.outputs = outputs;
+            return node;
         } else {
             parser_error(p, p->current, "asm block requires { }");
             return NULL;

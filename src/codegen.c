@@ -1310,11 +1310,11 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
 
         case NODE_THROW: {
             /* throw expr — evaluate the expression, set error tag to 1,
-             * emit defers/auto-drops, then return.
-             * The thrown value's discriminant goes in rax. */
+             * emit defers/auto-drops, then return. */
+            AstNode *val = node->data.throw_node.value;
             cg_comment(cg, "throw");
-            if (node->data.throw_node.value) {
-                cg_expr(cg, node->data.throw_node.value, slots);
+            if (val) {
+                cg_expr(cg, val, slots);
             } else {
                 cg_inst(cg, "xor rax, rax");  /* default error discriminant */
             }
@@ -1326,6 +1326,31 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_inst(cg, "mov rsp, rbp");
             cg_inst(cg, "pop rbp");
             cg_inst(cg, "ret");
+            break;
+        }
+
+        case NODE_ASM_BLOCK: {
+            /* Emit raw assembly text directly into the output */
+            if (node->data.asm_block.text) {
+                StringView asm_text = node->data.asm_block.text->data.literal.string_val;
+                if (asm_text.len > 0) {
+                    cg_write(cg, "; begin asm block\n");
+                    /* Write each line directly */
+                    const char *p = asm_text.data;
+                    const char *end = p + asm_text.len;
+                    while (p < end) {
+                        const char *line_start = p;
+                        while (p < end && *p != '\n') p++;
+                        if (p > line_start) {
+                            cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                        } else {
+                            cg_write(cg, "\n");
+                        }
+                        if (p < end) p++;
+                    }
+                    cg_write(cg, "; end asm block\n");
+                }
+            }
             break;
         }
 
