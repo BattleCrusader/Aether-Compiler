@@ -1,7 +1,5 @@
 /* ================================================================
  * asm_ir.c — Aether Multi-Target Assembler IR implementation
- *
- * Register table, block construction helpers, and backend factory.
  * ================================================================ */
 
 #include "aether/asm_ir.h"
@@ -11,7 +9,6 @@
 
 /* --- Global register translation table --- */
 const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
-    /* x86_64 GPRs */
     {ASM_REG_RAX,  "rax",  "x0",  "a0",  0, 64},
     {ASM_REG_RBX,  "rbx",  "x19", "s1",  1, 64},
     {ASM_REG_RCX,  "rcx",  "x1",  "a1",  0, 64},
@@ -28,8 +25,6 @@ const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
     {ASM_REG_R13,  "r13",  "x10", "s4",  1, 64},
     {ASM_REG_R14,  "r14",  "x11", "s5",  1, 64},
     {ASM_REG_R15,  "r15",  "x12", "s6",  1, 64},
-
-    /* 32-bit sub-registers */
     {ASM_REG_EAX,  "eax",  "w0",  "a0",  0, 32},
     {ASM_REG_EBX,  "ebx",  "w19", "s1",  1, 32},
     {ASM_REG_ECX,  "ecx",  "w1",  "a1",  0, 32},
@@ -46,8 +41,6 @@ const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
     {ASM_REG_R13D, "r13d", "w10", "s4",  1, 32},
     {ASM_REG_R14D, "r14d", "w11", "s5",  1, 32},
     {ASM_REG_R15D, "r15d", "w12", "s6",  1, 32},
-
-    /* 16-bit sub-registers */
     {ASM_REG_AX,   "ax",   NULL,  NULL,  0, 16},
     {ASM_REG_BX,   "bx",   NULL,  NULL,  1, 16},
     {ASM_REG_CX,   "cx",   NULL,  NULL,  0, 16},
@@ -64,8 +57,6 @@ const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
     {ASM_REG_R13W, "r13w", NULL,  NULL,  1, 16},
     {ASM_REG_R14W, "r14w", NULL,  NULL,  1, 16},
     {ASM_REG_R15W, "r15w", NULL,  NULL,  1, 16},
-
-    /* 8-bit sub-registers */
     {ASM_REG_AL,   "al",   NULL,  NULL,  0, 8},
     {ASM_REG_BL,   "bl",   NULL,  NULL,  1, 8},
     {ASM_REG_CL,   "cl",   NULL,  NULL,  0, 8},
@@ -86,8 +77,6 @@ const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
     {ASM_REG_R13B, "r13b", NULL,  NULL,  1, 8},
     {ASM_REG_R14B, "r14b", NULL,  NULL,  1, 8},
     {ASM_REG_R15B, "r15b", NULL,  NULL,  1, 8},
-
-    /* SIMD */
     {ASM_REG_XMM0,  "xmm0",  "v0",  NULL,  0, 128},
     {ASM_REG_XMM1,  "xmm1",  "v1",  NULL,  0, 128},
     {ASM_REG_XMM2,  "xmm2",  "v2",  NULL,  0, 128},
@@ -104,16 +93,12 @@ const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
     {ASM_REG_XMM13, "xmm13", "v13", NULL,  0, 128},
     {ASM_REG_XMM14, "xmm14", "v14", NULL,  0, 128},
     {ASM_REG_XMM15, "xmm15", "v15", NULL,  0, 128},
-
-    /* Segment registers */
     {ASM_REG_CS, "cs", NULL, NULL, 0, 16},
     {ASM_REG_DS, "ds", NULL, NULL, 0, 16},
     {ASM_REG_ES, "es", NULL, NULL, 0, 16},
     {ASM_REG_FS, "fs", NULL, NULL, 0, 16},
     {ASM_REG_GS, "gs", NULL, NULL, 0, 16},
     {ASM_REG_SS, "ss", NULL, NULL, 0, 16},
-
-    /* ARM64 */
     {ASM_REG_X0,  NULL, "x0",  NULL, 0, 64},
     {ASM_REG_X1,  NULL, "x1",  NULL, 0, 64},
     {ASM_REG_X2,  NULL, "x2",  NULL, 0, 64},
@@ -146,8 +131,6 @@ const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
     {ASM_REG_X29, NULL, "x29", NULL, 1, 64},
     {ASM_REG_X30, NULL, "x30", NULL, 0, 64},
     {ASM_REG_XZR, NULL, "xzr", NULL, 0, 64},
-
-    /* RISC-V */
     {ASM_REG_RV_ZERO, NULL, NULL, "zero", 0, 64},
     {ASM_REG_RV_RA,   NULL, NULL, "ra",   0, 64},
     {ASM_REG_RV_SP,   NULL, NULL, "sp",   1, 64},
@@ -182,7 +165,6 @@ const AsmRegEntry asm_reg_table[ASM_REG_COUNT] = {
     {ASM_REG_RV_T6,   NULL, NULL, "t6",   0, 64},
 };
 
-/* --- Helper: get register name for a given architecture --- */
 const char *asm_reg_name(AsmRegister reg, AsmArch arch) {
     if (reg < 0 || reg >= ASM_REG_COUNT) return NULL;
     const AsmRegEntry *e = &asm_reg_table[reg];
@@ -194,7 +176,6 @@ const char *asm_reg_name(AsmRegister reg, AsmArch arch) {
     return NULL;
 }
 
-/* --- Helper: look up register by name (NASM syntax) --- */
 AsmRegister asm_reg_from_name(const char *name) {
     if (!name) return ASM_REG_COUNT;
     for (int i = 0; i < ASM_REG_COUNT; i++) {
@@ -205,60 +186,43 @@ AsmRegister asm_reg_from_name(const char *name) {
     return ASM_REG_COUNT;
 }
 
-/* --- Helper: get register width in bits --- */
 int asm_reg_width(AsmRegister reg) {
     if (reg < 0 || reg >= ASM_REG_COUNT) return 0;
     return asm_reg_table[reg].width_bits;
 }
 
-/* --- Helper: is register callee-saved? --- */
 int asm_reg_is_callee_saved(AsmRegister reg) {
     if (reg < 0 || reg >= ASM_REG_COUNT) return 0;
     return asm_reg_table[reg].is_callee_saved;
 }
 
-/* --- Block construction --- */
 void asm_block_init(AsmBlock *block) {
     memset(block, 0, sizeof(AsmBlock));
+    block->capacity = 16;
+    block->elements = (AsmElement *)calloc(block->capacity, sizeof(AsmElement));
 }
 
-int asm_block_add_instr(AsmBlock *block, const AsmInstruction *instr) {
-    if (block->count >= ASM_MAX_INSTRUCTIONS) return -1;
-    block->elements[block->count].type = ASM_ELEM_INSTRUCTION;
-    block->elements[block->count].instr = *instr;
-    block->count++;
+void asm_block_free(AsmBlock *block) {
+    if (block->elements) {
+        free(block->elements);
+        block->elements = NULL;
+    }
+    block->count = 0;
+    block->capacity = 0;
+}
+
+int asm_block_add(AsmBlock *block, const AsmElement *elem) {
+    if (block->count >= block->capacity) {
+        int new_cap = block->capacity * 2;
+        AsmElement *new_elems = (AsmElement *)realloc(block->elements, new_cap * sizeof(AsmElement));
+        if (!new_elems) return -1;
+        block->elements = new_elems;
+        block->capacity = new_cap;
+    }
+    block->elements[block->count++] = *elem;
     return 0;
 }
 
-int asm_block_add_directive(AsmBlock *block, const AsmDirective *dir) {
-    if (block->count >= ASM_MAX_INSTRUCTIONS) return -1;
-    block->elements[block->count].type = ASM_ELEM_DIRECTIVE;
-    block->elements[block->count].directive = *dir;
-    block->count++;
-    return 0;
-}
-
-int asm_block_add_label(AsmBlock *block, const char *name, int is_global) {
-    if (block->count >= ASM_MAX_INSTRUCTIONS) return -1;
-    AsmElement *e = &block->elements[block->count];
-    e->type = ASM_ELEM_LABEL;
-    e->label.is_global = is_global;
-    e->label.is_local = (name[0] == '.');
-    strncpy(e->label.name, name, ASM_MAX_LABEL_LEN - 1);
-    block->count++;
-    return 0;
-}
-
-int asm_block_add_comment(AsmBlock *block, const char *text) {
-    if (block->count >= ASM_MAX_INSTRUCTIONS) return -1;
-    AsmElement *e = &block->elements[block->count];
-    e->type = ASM_ELEM_COMMENT;
-    strncpy(e->comment, text, 255);
-    block->count++;
-    return 0;
-}
-
-/* --- Instruction construction --- */
 void asm_instr_init(AsmInstruction *instr, const char *mnemonic) {
     memset(instr, 0, sizeof(AsmInstruction));
     strncpy(instr->mnemonic, mnemonic, ASM_MAX_MNEMONIC_LEN - 1);
@@ -269,7 +233,6 @@ void asm_instr_add_operand(AsmInstruction *instr, const AsmOperand *op) {
     instr->operands[instr->operand_count++] = *op;
 }
 
-/* --- Operand construction --- */
 void asm_op_reg(AsmOperand *op, AsmRegister reg) {
     memset(op, 0, sizeof(AsmOperand));
     op->type = ASM_OP_REGISTER;
@@ -300,7 +263,6 @@ void asm_op_expr(AsmOperand *op, const char *expr) {
     strncpy(op->expr, expr, ASM_MAX_LABEL_LEN - 1);
 }
 
-/* --- Memory operand construction --- */
 void asm_mem_init(AsmMem *mem) {
     memset(mem, 0, sizeof(AsmMem));
     mem->base = ASM_REG_COUNT;
@@ -344,13 +306,9 @@ void asm_mem_rip_rel(AsmMem *mem, const char *label) {
     strncpy(mem->label, label, ASM_MAX_LABEL_LEN - 1);
 }
 
-/* --- Backend creation (stubs — backends implemented separately) --- */
 AsmBackend *asm_backend_create(AsmArch arch) {
+    (void)arch;
     AsmBackend *b = (AsmBackend *)calloc(1, sizeof(AsmBackend));
-    if (!b) return NULL;
-    b->arch = arch;
-    b->emit = NULL;  /* set by backend implementations */
-    b->destroy = NULL;
     return b;
 }
 

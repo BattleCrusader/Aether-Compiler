@@ -12,10 +12,9 @@
  * ================================================================ */
 
 /* Maximum sizes */
-#define ASM_MAX_OPERANDS 6
-#define ASM_MAX_INSTRUCTIONS 4096
-#define ASM_MAX_LABEL_LEN 256
-#define ASM_MAX_MNEMONIC_LEN 32
+#define ASM_MAX_OPERANDS 3
+#define ASM_MAX_LABEL_LEN 48
+#define ASM_MAX_MNEMONIC_LEN 12
 
 /* --- Register enum (architecture-neutral) --- */
 typedef enum {
@@ -78,35 +77,35 @@ typedef enum {
 
 /* --- Size specifier --- */
 typedef enum {
-    ASM_SIZE_NONE,   /* no size specified */
-    ASM_SIZE_BYTE,   /* 8-bit  */
-    ASM_SIZE_WORD,   /* 16-bit */
-    ASM_SIZE_DWORD,  /* 32-bit */
-    ASM_SIZE_QWORD,  /* 64-bit */
-    ASM_SIZE_OWORD,  /* 128-bit (SSE) */
-    ASM_SIZE_TWORD,  /* 80-bit (x87) */
+    ASM_SIZE_NONE,
+    ASM_SIZE_BYTE,
+    ASM_SIZE_WORD,
+    ASM_SIZE_DWORD,
+    ASM_SIZE_QWORD,
+    ASM_SIZE_OWORD,
+    ASM_SIZE_TWORD,
 } AsmSizeSpec;
 
 /* --- Addressing mode --- */
 typedef enum {
-    ASM_ADDR_NONE,           /* not a memory operand */
-    ASM_ADDR_DIRECT,         /* [label] or [abs_addr] */
-    ASM_ADDR_BASE,           /* [base] */
-    ASM_ADDR_BASE_DISP,      /* [base + disp] */
-    ASM_ADDR_BASE_INDEX,     /* [base + index*scale] */
-    ASM_ADDR_BASE_INDEX_DISP,/* [base + index*scale + disp] */
-    ASM_ADDR_RIP_REL,        /* [rel label] */
+    ASM_ADDR_NONE,
+    ASM_ADDR_DIRECT,
+    ASM_ADDR_BASE,
+    ASM_ADDR_BASE_DISP,
+    ASM_ADDR_BASE_INDEX,
+    ASM_ADDR_BASE_INDEX_DISP,
+    ASM_ADDR_RIP_REL,
 } AsmAddrMode;
 
 /* --- Memory operand --- */
 typedef struct {
     AsmAddrMode mode;
-    AsmRegister base;         /* base register (ASM_REG_COUNT = none) */
-    AsmRegister index;        /* index register (ASM_REG_COUNT = none) */
-    int scale;                /* 1, 2, 4, 8 */
-    int64_t displacement;     /* signed displacement */
-    char label[ASM_MAX_LABEL_LEN]; /* label name for direct/rip-relative */
-    AsmSizeSpec size;         /* size override (e.g., qword [rax]) */
+    AsmRegister base;
+    AsmRegister index;
+    int scale;
+    int64_t displacement;
+    char label[ASM_MAX_LABEL_LEN];
+    AsmSizeSpec size;
 } AsmMem;
 
 /* --- Operand type --- */
@@ -114,8 +113,8 @@ typedef enum {
     ASM_OP_REGISTER,
     ASM_OP_IMMEDIATE,
     ASM_OP_MEMORY,
-    ASM_OP_LABEL,       /* label reference (jump target, etc.) */
-    ASM_OP_EXPR,        /* expression (e.g., label + 5) */
+    ASM_OP_LABEL,
+    ASM_OP_EXPR,
 } AsmOperandType;
 
 /* --- Operand --- */
@@ -125,7 +124,7 @@ typedef struct {
     int64_t immediate;
     AsmMem mem;
     char label[ASM_MAX_LABEL_LEN];
-    char expr[ASM_MAX_LABEL_LEN]; /* raw expression text */
+    char expr[ASM_MAX_LABEL_LEN];
 } AsmOperand;
 
 /* --- Instruction --- */
@@ -133,8 +132,7 @@ typedef struct {
     char mnemonic[ASM_MAX_MNEMONIC_LEN];
     int operand_count;
     AsmOperand operands[ASM_MAX_OPERANDS];
-    /* Metadata */
-    int has_size_spec;       /* e.g., qword in "mov qword [rax], 0" */
+    int has_size_spec;
     AsmSizeSpec size_spec;
     int is_lock_prefix;
     int is_rep_prefix;
@@ -143,42 +141,42 @@ typedef struct {
 /* --- Directive type --- */
 typedef enum {
     ASM_DIR_NONE,
-    ASM_DIR_SECTION,     /* section .text */
-    ASM_DIR_GLOBAL,      /* global sym */
-    ASM_DIR_EXTERN,      /* extern sym */
-    ASM_DIR_ALIGN,       /* align N */
-    ASM_DIR_TIMES,       /* times N ... */
-    ASM_DIR_DB,          /* db ... */
-    ASM_DIR_DW,          /* dw ... */
-    ASM_DIR_DD,          /* dd ... */
-    ASM_DIR_DQ,          /* dq ... */
-    ASM_DIR_RESB,        /* resb N */
-    ASM_DIR_RESW,        /* resw N */
-    ASM_DIR_RESD,        /* resd N */
-    ASM_DIR_RESQ,        /* resq N */
-    ASM_DIR_ORG,         /* org N */
-    ASM_DIR_BITS,        /* bits N */
-    ASM_DIR_INCBIN,      /* incbin "file" */
-    ASM_DIR_EQU,         /* sym equ value */
-    ASM_DIR_STRUC,       /* struc / endstruc */
-    ASM_DIR_MACRO,       /* %macro / %endmacro */
+    ASM_DIR_SECTION,
+    ASM_DIR_GLOBAL,
+    ASM_DIR_EXTERN,
+    ASM_DIR_ALIGN,
+    ASM_DIR_TIMES,
+    ASM_DIR_DB,
+    ASM_DIR_DW,
+    ASM_DIR_DD,
+    ASM_DIR_DQ,
+    ASM_DIR_RESB,
+    ASM_DIR_RESW,
+    ASM_DIR_RESD,
+    ASM_DIR_RESQ,
+    ASM_DIR_ORG,
+    ASM_DIR_BITS,
+    ASM_DIR_INCBIN,
+    ASM_DIR_EQU,
+    ASM_DIR_STRUC,
+    ASM_DIR_MACRO,
 } AsmDirectiveType;
 
 /* --- Directive --- */
 typedef struct {
     AsmDirectiveType type;
-    char name[ASM_MAX_LABEL_LEN];   /* section name, symbol name, etc. */
-    int64_t value;                   /* alignment, count, etc. */
-    int64_t value2;                  /* second value (e.g., times count) */
-    AsmOperand data_operands[ASM_MAX_OPERANDS]; /* for db/dw/dd/dq */
+    char name[ASM_MAX_LABEL_LEN];
+    int64_t value;
+    int64_t value2;
+    AsmOperand data_operands[ASM_MAX_OPERANDS];
     int data_count;
 } AsmDirective;
 
 /* --- Label --- */
 typedef struct {
     char name[ASM_MAX_LABEL_LEN];
-    int is_global;       /* was declared with global */
-    int is_local;        /* starts with '.' */
+    int is_global;
+    int is_local;
 } AsmLabel;
 
 /* --- Block-level element type --- */
@@ -189,21 +187,22 @@ typedef enum {
     ASM_ELEM_COMMENT,
 } AsmElementType;
 
-/* --- Block element (instruction, directive, or label) --- */
+/* --- Block element (heap-allocated in AsmBlock) --- */
 typedef struct {
     AsmElementType type;
     AsmInstruction instr;
     AsmDirective directive;
     AsmLabel label;
-    char comment[256];
+    char comment[128];
 } AsmElement;
 
-/* --- Complete assembly block --- */
+/* --- Complete assembly block (heap-allocated) --- */
 typedef struct {
-    AsmElement elements[ASM_MAX_INSTRUCTIONS];
+    AsmElement *elements;
     int count;
-    char source_file[256];   /* original .ae file */
-    int source_line;         /* line number in .ae file */
+    int capacity;
+    char source_file[128];
+    int source_line;
 } AsmBlock;
 
 /* --- Target architecture --- */
@@ -213,7 +212,7 @@ typedef enum {
     ASM_ARCH_RISCV64,
 } AsmArch;
 
-/* --- Backend interface: emit AsmBlock as target assembly text --- */
+/* --- Backend interface --- */
 typedef struct {
     AsmArch arch;
     char *(*emit)(const AsmBlock *block, size_t *out_len);
@@ -222,15 +221,14 @@ typedef struct {
 
 /* --- Register translation table --- */
 typedef struct {
-    AsmRegister asm_reg;       /* architecture-neutral register */
-    const char *x86_64_name;   /* "rax", "rbx", etc. */
-    const char *arm64_name;    /* "x0", "x1", etc. */
-    const char *riscv64_name;  /* "a0", "s0", etc. */
-    int is_callee_saved;       /* callee-saved in standard calling conv */
-    int width_bits;            /* 8, 16, 32, 64, 128 */
+    AsmRegister asm_reg;
+    const char *x86_64_name;
+    const char *arm64_name;
+    const char *riscv64_name;
+    int is_callee_saved;
+    int width_bits;
 } AsmRegEntry;
 
-/* --- Global register table (defined in asm_ir.c) --- */
 extern const AsmRegEntry asm_reg_table[ASM_REG_COUNT];
 
 /* --- Helper functions --- */
@@ -241,10 +239,8 @@ int asm_reg_is_callee_saved(AsmRegister reg);
 
 /* --- Block construction --- */
 void asm_block_init(AsmBlock *block);
-int asm_block_add_instr(AsmBlock *block, const AsmInstruction *instr);
-int asm_block_add_directive(AsmBlock *block, const AsmDirective *dir);
-int asm_block_add_label(AsmBlock *block, const char *name, int is_global);
-int asm_block_add_comment(AsmBlock *block, const char *text);
+void asm_block_free(AsmBlock *block);
+int asm_block_add(AsmBlock *block, const AsmElement *elem);
 
 /* --- Instruction construction --- */
 void asm_instr_init(AsmInstruction *instr, const char *mnemonic);
