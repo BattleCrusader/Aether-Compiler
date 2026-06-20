@@ -82,10 +82,10 @@
 - [x] P05.14 — Dynamic dispatch (`dyn Trait` — fat pointer + vtable) 🟢
 - [x] P05.15 — Semantic enforcement of access modifiers at module boundaries 🟢
 
-## Phase 6 — Aether OS Integration 🔴 NOT STARTED
-- [ ] P06.01 — `sys func` keyword — direct syscall page calls (0x5000 table)
-- [ ] P06.02 — `module` keyword — generates kernel module `.ko` ELF
-- [ ] P06.03 — `@export` attribute — marks symbols for module loader
+## Phase 6 — Aether OS Integration 🔵 IN PROGRESS
+- [x] P06.01 — `sys func` keyword — direct syscall page calls (0x5000 table) 🟢
+- [x] P06.02 — `module` keyword — generates kernel module `.ko` ELF 🟢
+- [x] P06.03 — `@export` attribute — marks symbols for module loader 🟢
 - [ ] P06.04 — `@entry(addr)` attribute — sets binary/userland entry point
 - [ ] P06.05 — `@layout(start, max, file)` — boot-stage layout directives
 - [ ] P06.06 — `@kernel_layout` — compiler-aware memory map verification
