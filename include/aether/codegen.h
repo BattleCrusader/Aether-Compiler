@@ -31,6 +31,8 @@ typedef struct {
     AstNode *defer_stack;    /* linked list of deferred ASTs (LIFO) */
     int defer_count;         /* number of deferred items */
     AutoDrop *auto_drops;    /* linked list of class auto-drop entries */
+    int64_t entry_addr;      /* load address from @entry(addr), 0 = default */
+    const char *entry_func;  /* name of the entry-point function, NULL = default */
 } Codegen;
 
 Codegen *codegen_create(Arena *a);

@@ -86,7 +86,7 @@
 - [x] P06.01 — `sys func` keyword — direct syscall page calls (0x5000 table) 🟢
 - [x] P06.02 — `module` keyword — generates kernel module `.ko` ELF 🟢
 - [x] P06.03 — `@export` attribute — marks symbols for module loader 🟢
-- [ ] P06.04 — `@entry(addr)` attribute — sets binary/userland entry point
+- [x] P06.04 — `@entry(addr)` attribute — sets binary/userland entry point 🟢
 - [ ] P06.05 — `@layout(start, max, file)` — boot-stage layout directives
 - [ ] P06.06 — `@kernel_layout` — compiler-aware memory map verification
 - [ ] P06.07 — `@module_abi(version)` — ABI compliance checking

@@ -285,6 +285,8 @@ Codegen *codegen_create(Arena *a) {
     cg->defer_stack = NULL;
     cg->defer_count = 0;
     cg->auto_drops = NULL;
+    cg->entry_addr = 0;
+    cg->entry_func = NULL;
     return cg;
 }
 
@@ -1462,6 +1464,20 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         }
     }
 
+    /* First pass: scan for functions with @entry(addr) attribute */
+    cg->entry_addr = 0;
+    cg->entry_func = NULL;
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *node = program->data.list.items[i];
+        if (node->type == NODE_FUNC_DECL && node->data.func.entry_addr != -1) {
+            cg->entry_addr = node->data.func.entry_addr;
+            cg->entry_func = arena_strndup(cg->arena,
+                node->data.func.name->data.ident.name.data,
+                node->data.func.name->data.ident.name.len);
+            break;  /* first entry-point function wins */
+        }
+    }
+
     /* Target-specific directives */
     bool is_macho = (cg->target == TARGET_MACHO64);
     if (!is_macho) {
@@ -1470,34 +1486,72 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     cg_write(cg, "default rel\n\n");
     cg_write(cg, "section .text\n\n");
 
-    /* Entry point — target-dependent */
-    const char *entry;
-    if (is_macho) {
-        entry = "_aether_entry";  /* Mach-O: use custom entry, linker -e flag */
+    /* Entry point */
+    if (cg->entry_func) {
+        /* @entry(addr) is set — function IS the entry point directly */
+        cg_write_fmt(cg, "; Entry point: %s at 0x%lx\n", cg->entry_func, (unsigned long)cg->entry_addr);
+        cg_write_fmt(cg, "global %s\n", cg->entry_func);
+        /* The function label is emitted by cg_func later — no wrapper needed
+           for freestanding targets (linker script handles ENTRY(func_name)).
+           For host targets, we still need an OS-visible entry point that
+           calls the @entry function. */
+        if (is_macho) {
+            const char *entry = "_aether_entry";
+            cg_write_fmt(cg, "global %s\n", entry);
+            cg_write_fmt(cg, "%s:\n", entry);
+            cg_inst1(cg, "mov", "rbp, rsp");
+            cg_comment(cg, "call entry function");
+            cg_write_fmt(cg, "    call %s\n", cg->entry_func);
+            cg_comment(cg, "macOS exit(rdi = rax)");
+            cg_inst1(cg, "mov", "rdi, rax");
+            cg_inst1(cg, "mov", "rax, 0x2000001");
+            cg_inst(cg, "syscall");
+            cg_inst(cg, "hlt");
+            cg_write(cg, "\n");
+        } else if (cg->target == TARGET_ELF64_HOST) {
+            const char *entry = "_start";
+            cg_write_fmt(cg, "global %s\n", entry);
+            cg_write_fmt(cg, "%s:\n", entry);
+            cg_inst1(cg, "mov", "rbp, rsp");
+            cg_comment(cg, "call entry function");
+            cg_write_fmt(cg, "    call %s\n", cg->entry_func);
+            cg_comment(cg, "Linux exit(rdi = rax)");
+            cg_inst1(cg, "mov", "rdi, rax");
+            cg_inst1(cg, "mov", "rax, 60");
+            cg_inst(cg, "syscall");
+            cg_inst(cg, "hlt");
+            cg_write(cg, "\n");
+        }
     } else {
-        entry = "_start";          /* ELF: must match ENTRY(_start) in linker script */
-    }
-    cg_write_fmt(cg, "global %s\n", entry);
-    cg_write_fmt(cg, "%s:\n", entry);
-    cg_inst1(cg, "mov", "rbp, rsp");
-    cg_comment(cg, "call main()");
-    cg_inst(cg, "call main");
+        /* Default entry point: wrapper calls main(), then exits */
+        const char *entry;
+        if (is_macho) {
+            entry = "_aether_entry";  /* Mach-O: custom entry, linker -e flag */
+        } else {
+            entry = "_start";          /* ELF: ENTRY(_start) in linker script */
+        }
+        cg_write_fmt(cg, "global %s\n", entry);
+        cg_write_fmt(cg, "%s:\n", entry);
+        cg_inst1(cg, "mov", "rbp, rsp");
+        cg_comment(cg, "call main()");
+        cg_inst(cg, "call main");
 
-    if (is_macho) {
-        /* macOS exit: syscall 0x2000001 */
-        cg_comment(cg, "macOS exit(rdi = rax)");
-        cg_inst1(cg, "mov", "rdi, rax");
-        cg_inst1(cg, "mov", "rax, 0x2000001");
-        cg_inst(cg, "syscall");
-    } else {
-        /* Linux exit: syscall 60 */
-        cg_comment(cg, "Linux exit(rdi = rax)");
-        cg_inst1(cg, "mov", "rdi, rax");
-        cg_inst1(cg, "mov", "rax, 60");
-        cg_inst(cg, "syscall");
+        if (is_macho) {
+            /* macOS exit: syscall 0x2000001 */
+            cg_comment(cg, "macOS exit(rdi = rax)");
+            cg_inst1(cg, "mov", "rdi, rax");
+            cg_inst1(cg, "mov", "rax, 0x2000001");
+            cg_inst(cg, "syscall");
+        } else {
+            /* Linux exit: syscall 60 */
+            cg_comment(cg, "Linux exit(rdi = rax)");
+            cg_inst1(cg, "mov", "rdi, rax");
+            cg_inst1(cg, "mov", "rax, 60");
+            cg_inst(cg, "syscall");
+        }
+        cg_inst(cg, "hlt");
+        cg_write(cg, "\n");
     }
-    cg_inst(cg, "hlt");
-    cg_write(cg, "\n");
 
     /* Emit runtime helpers and data sections — BEFORE user functions */
     {
@@ -1716,8 +1770,12 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
             /* Write linker script inline */
             FILE *ldf = fopen("/tmp/aether_ld.ld", "w");
             if (ldf) {
-                fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(_start)\nSECTIONS {\n");
-                fprintf(ldf, "  . = 0x400000;\n");
+                /* Use @entry address if set, otherwise default to 0x400000 */
+                uint64_t load_addr = (cg->entry_addr > 0) ? (uint64_t)cg->entry_addr : 0x400000;
+                /* Use @entry func name if set, otherwise default to _start */
+                const char *entry_name = cg->entry_func ? cg->entry_func : "_start";
+                fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(%s)\nSECTIONS {\n", entry_name);
+                fprintf(ldf, "  . = 0x%lx;\n", (unsigned long)load_addr);
                 fprintf(ldf, "  .text : { *(.text) *(.text.*) }\n");
                 fprintf(ldf, "  .rodata : { *(.rodata) *(.rodata.*) }\n");
                 fprintf(ldf, "  .data : { *(.data) *(.data.*) }\n");
