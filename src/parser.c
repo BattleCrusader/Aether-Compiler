@@ -137,8 +137,11 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
     if (p->panic_mode) { parser_sync(p); if (parser_check(p, TOKEN_EOF)) return; }
 
     /* Handle attributes like @export, @entry */
+    AstNode *last_attr = NULL;
     while (parser_match(p, TOKEN_AT)) {
-        parse_attribute(p);
+        last_attr = parse_attribute(p);
+        /* Consume newlines after attribute (but not indent/dedent) */
+        while (parser_match(p, TOKEN_NEWLINE));
     }
 
     /* Handle pub/private/internal/static modifiers */
@@ -153,9 +156,18 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
         AstNode *func = parse_func_decl(p);
         if (func) {
             func->data.func.access = access;
-            func->data.func.is_pub = is_pub;  // kept for backward compat for now
+            func->data.func.is_pub = is_pub;
             func->data.func.is_static = is_static;
             func->data.func.is_test = is_test;
+            /* Apply @export if the last attribute was export */
+            if (last_attr) {
+                const char *aname = arena_strndup(p->arena,
+                    last_attr->data.ident.name.data,
+                    last_attr->data.ident.name.len);
+                if (strcmp(aname, "export") == 0) {
+                    func->data.func.is_exported = true;
+                }
+            }
             node_list_append(decls, func);
         }
     } else if (parser_match(p, TOKEN_KW_SYS)) {
@@ -1055,7 +1067,9 @@ static AstNode *parse_type_postfix(Parser *p, AstNode *base) {
  * ================================================================ */
 
 AstNode *parse_attribute(Parser *p) {
-    if (parser_check(p, TOKEN_IDENT)) {
+    if (parser_check(p, TOKEN_IDENT) || parser_check(p, TOKEN_KW_EXPORT) ||
+        parser_check(p, TOKEN_KW_ENTRY) || parser_check(p, TOKEN_KW_LAYOUT) ||
+        parser_check(p, TOKEN_KW_TEST)) {
         Token t = p->current; parser_advance(p);
         AstNode *attr = node_create(p->arena, NODE_ATTR, t.loc);
         attr->data.ident.name = t.text;

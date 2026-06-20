@@ -162,6 +162,7 @@ typedef struct {
     AstNodeList type_params; /* generic type parameter identifiers */
     bool is_throws;         /* function has throws return */
     bool is_operator;       /* true if this is an operator overload (op_add, etc.) */
+    bool is_exported;       /* true if marked with @export */
     AstNodeList pre_conditions;  /* pre(expr) contract expressions */
     AstNodeList post_conditions; /* post(expr) contract expressions */
 } FuncDecl;
