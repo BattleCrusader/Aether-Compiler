@@ -1,0 +1,4 @@
+@entry(0x2000000)
+func main(): int {
+    return 42
+}

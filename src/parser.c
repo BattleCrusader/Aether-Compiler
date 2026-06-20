@@ -166,6 +166,8 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     last_attr->data.ident.name.len);
                 if (strcmp(aname, "export") == 0) {
                     func->data.func.is_exported = true;
+                } else if (strcmp(aname, "entry") == 0) {
+                    func->data.func.entry_addr = last_attr->data.attr.int_value;
                 }
             }
             node_list_append(decls, func);
@@ -1073,11 +1075,20 @@ AstNode *parse_attribute(Parser *p) {
         Token t = p->current; parser_advance(p);
         AstNode *attr = node_create(p->arena, NODE_ATTR, t.loc);
         attr->data.ident.name = t.text;
+        attr->data.attr.name = t.text;
+        attr->data.attr.int_value = -1;
 
-        /* @entry(0x2000000) — attribute with payload */
+        /* @entry(0x2000000) — attribute with numeric payload */
         if (parser_match(p, TOKEN_LPAREN)) {
-            while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
-                parser_advance(p);
+            /* Try to parse a numeric expression (hex/decimal) */
+            if (parser_check(p, TOKEN_INT_LITERAL)) {
+                Token val_tok = p->current; parser_advance(p);
+                attr->data.attr.int_value = (int64_t)val_tok.val.int_value;
+            } else {
+                /* Skip unknown payload tokens */
+                while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
+                    parser_advance(p);
+                }
             }
             parser_expect(p, TOKEN_RPAREN, "attribute");
         }

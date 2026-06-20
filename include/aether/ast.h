@@ -163,6 +163,7 @@ typedef struct {
     bool is_throws;         /* function has throws return */
     bool is_operator;       /* true if this is an operator overload (op_add, etc.) */
     bool is_exported;       /* true if marked with @export */
+    int64_t entry_addr;     /* load address from @entry(addr), -1 if not set */
     AstNodeList pre_conditions;  /* pre(expr) contract expressions */
     AstNodeList post_conditions; /* post(expr) contract expressions */
 } FuncDecl;
@@ -381,6 +382,12 @@ typedef struct {
     AstNode *body;          /* handler block */
 } CatchArm;
 
+/* Attribute: @name or @name(payload) */
+typedef struct {
+    StringView name;        /* attribute name (e.g. "export", "entry") */
+    int64_t int_value;      /* for numeric payloads like @entry(addr), -1 if not set */
+} AttrData;
+
 /* ================================================================
  * AST Node structure (tagged union of all the above)
  * ================================================================ */
@@ -420,6 +427,7 @@ struct AstNode {
         TryNode try_node;
         ThrowNode throw_node;
         CatchArm catch_arm;
+        AttrData attr;
         AstNodeList list;   /* generic list for blocks */
     } data;
 };

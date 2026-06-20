@@ -30,6 +30,7 @@ AstNode *node_func_decl(Arena *a, Location loc, AstNode *name, bool is_pub, bool
         node->data.func.is_pub = is_pub;
         node->data.func.is_static = is_static;
         node->data.func.sys_index = -1;
+        node->data.func.entry_addr = -1;
     }
     return node;
 }
