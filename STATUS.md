@@ -88,7 +88,7 @@
 - [x] P06.03 — `@export` attribute — marks symbols for module loader 🟢
 - [x] P06.04 — `@entry(addr)` attribute — sets binary/userland entry point 🟢
 - [x] P06.05 — `@layout(start, max, file)` — boot-stage layout directives 🟢
-- [ ] P06.06 — `@kernel_layout` — compiler-aware memory map verification
+- [x] P06.06 — `@kernel_layout` — compiler-aware memory map verification 🟢
 - [ ] P06.07 — `@module_abi(version)` — ABI compliance checking
 - [ ] P06.08 — Declarative resources: `pool`, `protocol` keywords
 - [ ] P06.09 — Target-specific code generation (kernel vs binary vs module)

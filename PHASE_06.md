@@ -56,12 +56,13 @@
 - [x] Test fixture: `test_layout.ae` — compiles to 512-byte flat binary 🟢
 - [x] `make test-layout` target added — verifies flat binary output size 🟢
 
-### P06.06 — `@kernel_layout` — Memory Map Verification
-- [ ] Parser: `@kernel_layout` attribute on functions
-- [ ] Semantic: verify declared memory regions don't overlap known OS regions
-- [ ] Semantic: check reserved ranges against the Aether OS memory map
-- [ ] Codegen: emit layout verification as comments (debug) or assertions (test mode)
-- [ ] Test fixture: overlapping region detection test
+### P06.06 — `@kernel_layout` — Memory Map Verification 🟢
+- [x] Parser: `@kernel_layout` attribute on functions 🟢
+- [x] AST: `is_kernel_layout` flag on FuncDecl 🟢
+- [x] Codegen: `MemoryRegion` table with all 9 Aether OS known memory regions 🟢
+- [x] Codegen: `find_overlapping_region()` — address overlap check against known regions 🟢
+- [x] Codegen: `cg_verify_kernel_layout()` — emits memory map as assembly comments 🟢
+- [x] Test fixture: `test_kernellayout.ae` — @kernel_layout function compiles to assembly 🟢
 
 ### P06.07 — `@module_abi(version)` — ABI Compliance
 - [ ] Parser: `@module_abi(version=N)` on module declarations

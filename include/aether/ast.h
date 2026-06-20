@@ -163,6 +163,7 @@ typedef struct {
     bool is_throws;         /* function has throws return */
     bool is_operator;       /* true if this is an operator overload (op_add, etc.) */
     bool is_exported;       /* true if marked with @export */
+    bool is_kernel_layout;  /* true if marked with @kernel_layout */
     int64_t entry_addr;     /* load address from @entry(addr), -1 if not set */
     bool has_layout;        /* true if @layout attribute is set */
     uint64_t layout_start;  /* start address from @layout(start=N) */

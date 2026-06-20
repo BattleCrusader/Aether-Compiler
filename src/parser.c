@@ -173,6 +173,8 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.layout_start = (uint64_t)last_attr->data.attr.layout_start;
                     func->data.func.layout_max = (uint64_t)last_attr->data.attr.layout_max;
                     func->data.func.layout_file = last_attr->data.attr.layout_file;
+                } else if (strcmp(aname, "kernel_layout") == 0) {
+                    func->data.func.is_kernel_layout = true;
                 }
             }
             node_list_append(decls, func);
