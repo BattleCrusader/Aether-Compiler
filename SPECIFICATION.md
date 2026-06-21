@@ -659,7 +659,7 @@ struct Point {
 }
 
 let p1 = Point { x: 0, y: 0 }
-let p2 = Point { x: 3, y: 5 }
+let p2 = Point { x: 3, y: 4 }
 let d = p1.distance(p2)  // 5.0
 ```
 
@@ -1146,7 +1146,7 @@ func halt() {
 
 ```aether
 func cpuid(): (u64, u64, u64, u64) {
-    asm -> (eax, ebx, ecx, edx) {
+    asm: (eax, ebx, ecx, edx) {
         mov rax, 0
         cpuid
     }
