@@ -111,10 +111,19 @@ TEST_FIXTURES = \
 	tests/fixtures/test_sysfunc.ae \
 	tests/fixtures/test_export.ae \
 	tests/fixtures/test_entry.ae \
-	tests/fixtures/test_module_abi.ae
+	tests/fixtures/test_module_abi.ae \
+	tests/fixtures/test_interp_basic.ae \
+	tests/fixtures/test_interp_multi.ae \
+	tests/fixtures/test_interp_expr.ae \
+	tests/fixtures/test_interp_none.ae \
+	tests/fixtures/test_interp_concat.ae \
+	tests/fixtures/test_interp_numbers.ae \
+	tests/fixtures/test_interp_numeric.ae \
+	tests/fixtures/test_interp_num_concat.ae \
+	tests/fixtures/test_interp_print_num.ae
 
 # Expected exit codes for each fixture
-TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42 42 42 42 42 128 42 42 42 42 42 42 42 42 42
+TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42 42 42 42 42 128 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
