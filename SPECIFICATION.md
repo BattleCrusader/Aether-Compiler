@@ -21,6 +21,7 @@
 13. [Generics](#13-generics)
 14. [Exception Handling](#14-exception-handling)
 15. [NASM Inline Assembly](#15-nasm-inline-assembly)
+    - [15.7 Universal Binaries](#157-universal-binaries-multi-arch-dispatch)
 16. [Aether OS Integration](#16-aether-os-integration)
 17. [Compile-Time Execution](#17-compile-time-execution)
 18. [Contract Programming](#18-contract-programming)
@@ -1804,6 +1805,110 @@ func is_x86_64(): bool {
 - Pseudo-instructions (`times`, `resb`, `equ`) are expanded or mapped to target equivalents.
 - Directives (`[org 0x7C00]`, `[bits 64]`) are target-specific and may need manual adjustment.
 - The translation layer is a best-effort mapping — for maximum control, use target-specific `asm` blocks with `#if arch()` guards.
+
+### 15.7 Universal Binaries (Multi-Arch Dispatch)
+
+Aether can compile a single source file into a **universal binary** that runs natively on multiple architectures without an interpreter, JIT, or emulation layer. The binary contains multiple architecture-specific code slices and a tiny CPU detection trampoline.
+
+#### 15.7.1 How It Works
+
+```
+┌─────────────────────────────────────┐
+│         Universal Binary             │
+│  ┌───────────────────────────────┐  │
+│  │ CPU Detection Trampoline      │  │  ← ~30 bytes, runs first
+│  │   if x86_64: jmp to .text.x86│  │
+│  │   if ARM64:  jmp to .text.arm│  │
+│  └───────────────────────────────┘  │
+│  ┌───────────────────────────────┐  │
+│  │ .text.x86_64                  │  │  ← compiled from Aether source
+│  │   (NASM → x86_64 machine code)│  │
+│  └───────────────────────────────┘  │
+│  ┌───────────────────────────────┐  │
+│  │ .text.arm64                   │  │  ← same source, ARM64 backend
+│  │   (NASM → ARM64 machine code) │  │
+│  └───────────────────────────────┘  │
+│  ┌───────────────────────────────┐  │
+│  │ .rodata (shared)              │  │  ← deduplicated, shared by both
+│  └───────────────────────────────┘  │
+└─────────────────────────────────────┘
+```
+
+The pipeline:
+
+1. **Compile once** to x86_64 NASM → assemble to x86_64 machine code
+2. **Translate the same NASM** through the ARM64 backend → assemble to ARM64 machine code
+3. **Merge** both code slices into a single ELF with a dispatch trampoline
+4. **Deduplicate** shared .rodata/.data sections
+
+The result is a single file that runs natively on both architectures with **zero runtime overhead** — the CPU detection trampoline runs once at startup, then execution continues in the native code path.
+
+#### 15.7.2 CPU Detection Trampoline
+
+```aether
+# Generated automatically by --target universal
+func _start() {
+    asm {
+        # x86_64 path: CPUID check
+        pushfq
+        pushfq
+        xor dword [rsp], 0x00200000
+        popfq
+        pushfq
+        pop rax
+        xor eax, [rsp]
+        and eax, 0x00200000
+        popfq
+        jnz .arm64_entry
+    .x86_64_entry:
+        jmp _start_x86_64
+    .arm64_entry:
+        jmp _start_arm64
+    }
+}
+```
+
+On ARM64 hardware, the CPUID check fails (the `pushfq`/`popfq` sequence is x86-specific and will trap), so the trampoline falls through to the ARM64 entry. On x86_64 hardware, the check succeeds and jumps to the x86_64 entry.
+
+#### 15.7.3 CLI Usage
+
+```bash
+# Build a universal binary for x86_64 + ARM64
+aether build --target universal --output kernel.elf
+
+# Build for all three architectures
+aether build --target universal-all --output kernel.elf
+```
+
+#### 15.7.4 When to Use Universal Binaries
+
+- **Kernel images** that must boot on both x86_64 and ARM64 hardware
+- **Boot sector stage1/stage2** that needs to work across architectures
+- **Distribution binaries** where you don't know the target architecture
+- **Developer tooling** that should work on both Intel and Apple Silicon Macs
+
+The tradeoff is binary size — a universal binary is roughly 2x the size of a single-arch binary (plus the tiny trampoline). For kernel images this is usually acceptable; for boot sectors constrained to 512 bytes, single-arch builds remain the default.
+
+#### 15.7.5 Architecture-Specific Code
+
+When writing code that must behave differently per architecture, use compile-time guards:
+
+```aether
+#run {
+    if arch() == "x86_64" {
+        emit('const IO_BASE = 0x3F8')
+    } elif arch() == "arm64" {
+        emit('const IO_BASE = 0x3F000000')
+    }
+}
+
+# Or runtime dispatch for small differences
+func cache_line_size(): u64 {
+    if arch() == "x86_64" { return 64 }
+    if arch() == "arm64"  { return 128 }
+    return 64
+}
+```
 
 ---
 

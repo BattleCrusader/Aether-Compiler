@@ -153,7 +153,7 @@ static void emit_dir(Str *s, const AsmDirective *dir) {
     }
 }
 
-static char *emit_block(const AsmBlock *block, size_t *out_len) {
+static char *emit_block(const AsmIRBlock *block, size_t *out_len) {
     Str s; str_init(&s);
     str_app(&s, ".text\n\n");
     for (int i = 0; i < block->count; i++) {

@@ -512,7 +512,7 @@ int asm_parse_label(AsmParser *parser, AsmLabel *label) {
     return 0;
 }
 
-int asm_parse_block(AsmParser *parser, AsmBlock *block) {
+int asm_parse_block(AsmParser *parser, AsmIRBlock *block) {
     asm_block_init(block);
     while (1) {
         AsmToken tok = asm_parser_peek(parser);
@@ -581,7 +581,7 @@ int asm_parse_block(AsmParser *parser, AsmBlock *block) {
     return !parser->has_error;
 }
 
-int asm_parse_string(const char *source, AsmBlock *block, const char *filename) {
+int asm_parse_string(const char *source, AsmIRBlock *block, const char *filename) {
     AsmParser parser;
     asm_parser_init(&parser, source, strlen(source), filename);
     return asm_parse_block(&parser, block);

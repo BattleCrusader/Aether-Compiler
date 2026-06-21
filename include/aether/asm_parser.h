@@ -65,7 +65,7 @@ int asm_parser_match(AsmParser *parser, AsmTokenType type);
 int asm_parser_expect(AsmParser *parser, AsmTokenType type, const char *context);
 
 /* --- High-level parse --- */
-int asm_parse_block(AsmParser *parser, AsmBlock *block);
+int asm_parse_block(AsmParser *parser, AsmIRBlock *block);
 
 /* --- Element parsers --- */
 int asm_parse_instruction(AsmParser *parser, AsmInstruction *instr);
@@ -76,6 +76,6 @@ int asm_parse_label(AsmParser *parser, AsmLabel *label);
 int asm_parse_data_values(AsmParser *parser, AsmOperand *values, int *count, int max);
 
 /* --- Convenience: parse a string directly into a block --- */
-int asm_parse_string(const char *source, AsmBlock *block, const char *filename);
+int asm_parse_string(const char *source, AsmIRBlock *block, const char *filename);
 
 #endif /* AETHER_ASM_PARSER_H */

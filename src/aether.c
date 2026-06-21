@@ -211,6 +211,9 @@ static int parse_target_name(const char *t) {
     if (strcmp(t, "module") == 0)              return (int)TARGET_MODULE;
     if (strcmp(t, "binary") == 0)              return (int)TARGET_BINARY;
     if (strcmp(t, "boot") == 0)                return (int)TARGET_BOOT;
+    if (strcmp(t, "asm-x86_64") == 0)          return (int)TARGET_ASM_X86_64;
+    if (strcmp(t, "asm-arm64") == 0)           return (int)TARGET_ASM_ARM64;
+    if (strcmp(t, "asm-riscv64") == 0)         return (int)TARGET_ASM_RISCV64;
     return -1;
 }
 

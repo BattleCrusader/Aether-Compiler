@@ -187,7 +187,7 @@ typedef enum {
     ASM_ELEM_COMMENT,
 } AsmElementType;
 
-/* --- Block element (heap-allocated in AsmBlock) --- */
+/* --- Block element (heap-allocated in AsmIRBlock) --- */
 typedef struct {
     AsmElementType type;
     AsmInstruction instr;
@@ -203,7 +203,7 @@ typedef struct {
     int capacity;
     char source_file[128];
     int source_line;
-} AsmBlock;
+} AsmIRBlock;
 
 /* --- Target architecture --- */
 typedef enum {
@@ -215,7 +215,7 @@ typedef enum {
 /* --- Backend interface --- */
 typedef struct {
     AsmArch arch;
-    char *(*emit)(const AsmBlock *block, size_t *out_len);
+    char *(*emit)(const AsmIRBlock *block, size_t *out_len);
     void (*destroy)(char *output);
 } AsmBackend;
 
@@ -238,9 +238,9 @@ int asm_reg_width(AsmRegister reg);
 int asm_reg_is_callee_saved(AsmRegister reg);
 
 /* --- Block construction --- */
-void asm_block_init(AsmBlock *block);
-void asm_block_free(AsmBlock *block);
-int asm_block_add(AsmBlock *block, const AsmElement *elem);
+void asm_block_init(AsmIRBlock *block);
+void asm_block_free(AsmIRBlock *block);
+int asm_block_add(AsmIRBlock *block, const AsmElement *elem);
 
 /* --- Instruction construction --- */
 void asm_instr_init(AsmInstruction *instr, const char *mnemonic);
