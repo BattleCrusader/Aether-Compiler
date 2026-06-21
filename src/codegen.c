@@ -320,6 +320,28 @@ static bool is_numeric_expr(AstNode *node) {
     return false;
 }
 
+/* Check if an expression node evaluates to a string type */
+static bool is_string_expr(AstNode *node) {
+    if (!node) return false;
+    if (node->type == NODE_LITERAL_STRING) return true;
+    /* BIN_CONCAT chains produce strings (interpolation) */
+    if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_CONCAT) return true;
+    if (node->type == NODE_IDENT && node->data.ident.resolved) {
+        AstNode *decl = node->data.ident.resolved;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
+            return type_node->data.type_node.prim == PRIM_STRING;
+        }
+        /* No type annotation — check if initializer is a string expression */
+        if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
+            return is_string_expr(decl->data.let_decl.value);
+        }
+    }
+    return false;
+}
+
 /* ================================================================ */
 
 /* ================================================================ */
@@ -796,7 +818,43 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             }
 
             switch (node->data.binary.op) {
-                case BIN_ADD: cg_inst1(cg, "add",  "rax, rcx"); break;
+                case BIN_ADD: {
+                    /* If either operand is a string, do concat instead of numeric add */
+                    bool left_str = is_string_expr(node->data.binary.left);
+                    bool right_str = is_string_expr(node->data.binary.right);
+                    if (left_str || right_str) {
+                        cg_comment(cg, "string concat (+)");
+                        /* rax = left, rcx = right. Save rcx before itoa (clobbers rcx). */
+                        bool left_num = is_numeric_expr(node->data.binary.left);
+                        bool right_num = is_numeric_expr(node->data.binary.right);
+                        if (left_num || right_num) {
+                            cg_inst1(cg, "push", "rcx");
+                        }
+                        if (left_num) {
+                            cg_inst1(cg, "mov", "rdi, rax");
+                            cg_inst(cg, "call __aether_itoa");
+                        }
+                        if (right_num) {
+                            cg_inst1(cg, "push", "rax");
+                            cg_inst1(cg, "pop", "rdi");
+                            cg_inst1(cg, "pop", "rax");
+                            cg_inst1(cg, "push", "rdi");
+                            cg_inst1(cg, "mov", "rdi, rax");
+                            cg_inst(cg, "call __aether_itoa");
+                            cg_inst1(cg, "mov", "rcx, rax");
+                            cg_inst1(cg, "pop", "rax");
+                        } else if (left_num) {
+                            cg_inst1(cg, "pop", "rcx");
+                        }
+                        cg_inst1(cg, "push", "rax");
+                        cg_inst1(cg, "push", "rcx");
+                        cg_inst(cg, "call __aether_concat");
+                        cg_inst(cg, "add rsp, 16");
+                        break;
+                    }
+                    cg_inst1(cg, "add", "rax, rcx");
+                    break;
+                }
                 case BIN_SUB: cg_inst1(cg, "sub",  "rax, rcx"); break;
                 case BIN_MUL: cg_inst1(cg, "mul",  "rcx"); break;
                 case BIN_DIV: cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); break;
