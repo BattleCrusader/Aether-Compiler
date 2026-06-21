@@ -1658,6 +1658,15 @@ AstNode *parse_expr_prec(Parser *p, Precedence min_prec) {
     AstNode *left = parse_prefix(p);
     if (!left) return NULL;
 
+    /* Parse postfix operators (++, --) */
+    while (parser_check(p, TOKEN_PLUS_PLUS) || parser_check(p, TOKEN_MINUS_MINUS)) {
+        UnaryOp op = parser_match(p, TOKEN_PLUS_PLUS) ? UNARY_INC : UNARY_DEC;
+        AstNode *postfix = node_create(p->arena, NODE_UNARY_OP, p->previous.loc);
+        postfix->data.unary.op = op;
+        postfix->data.unary.operand = left;
+        left = postfix;
+    }
+
     /* Parse infix operators while they have sufficient precedence */
     while (true) {
         if (parser_check(p, TOKEN_EOF) || parser_check(p, TOKEN_NEWLINE) ||

@@ -135,7 +135,9 @@ typedef enum {
 
     /* Assignment operators */
     TOKEN_PLUS_EQ,      /* += */
+    TOKEN_PLUS_PLUS,    /* ++ */
     TOKEN_MINUS_EQ,     /* -= */
+    TOKEN_MINUS_MINUS,  /* -- */
     TOKEN_STAR_EQ,      /* *= */
     TOKEN_SLASH_EQ,     /* /= */
 

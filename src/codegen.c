@@ -820,6 +820,14 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case UNARY_NOT: cg_inst(cg, "test rax, rax"); cg_inst(cg, "sete al"); cg_inst(cg, "movzx rax, al"); break;
                 case UNARY_BIT_NOT: cg_inst1(cg, "not", "rax"); break;
                 case UNARY_DEREF: cg_inst(cg, "mov rax, [rax]"); break;
+                case UNARY_INC:
+                    cg_comment(cg, "increment");
+                    cg_inst(cg, "add rax, 1");
+                    break;
+                case UNARY_DEC:
+                    cg_comment(cg, "decrement");
+                    cg_inst(cg, "sub rax, 1");
+                    break;
                 case UNARY_HEAP: {
                     /* heap Expr — allocate, store result, return pointer */
                     cg_comment(cg, "heap alloc");
