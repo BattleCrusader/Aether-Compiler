@@ -118,7 +118,7 @@
 - [ ] P07.08 — Compiler can compile itself with no C bootstrap
 - [ ] P07.09 — C bootstrap source archived as historical reference only
 
-## Phase 8 — Multi-Target Assembler 🔵 IN PROGRESS
+## Phase 8 — Multi-Target Assembler 🟢 COMPLETE
 - [x] P08.01 — NASM IR definition (instruction set, register file, addressing modes) 🟢
 - [x] P08.02 — NASM parser (extract instructions, operands, directives from asm blocks) 🟢
 - [x] P08.03 — x86_64 backend (passthrough — direct NASM emission) 🟢
@@ -152,6 +152,18 @@
 - [ ] P09.18 — Actionable, empathetic error messages with suggested fixes
 - [ ] P09.19 — Performance benchmarking suite
 
+## Phase 10 — Universal Binary & Multi-Arch Dispatch 🔴 NOT STARTED
+- [ ] P10.01 — Fat binary container format (Mach-O universal / custom multi-arch ELF)
+- [ ] P10.02 — CPU detection trampoline (CPUID on x86, MIDR_EL1 on ARM)
+- [ ] P10.03 — Dual compilation pipeline (compile once per arch, merge)
+- [ ] P10.04 — ARM64 ELF64 assembler integration (aarch64-linux-gnu-as or built-in)
+- [ ] P10.05 — `--target universal` CLI flag
+- [ ] P10.06 — Shared .rodata/.data section deduplication
+- [ ] P10.07 — Architecture-specific init (GDT setup vs system register config)
+- [ ] P10.08 — Multi-arch test suite (same source, both architectures)
+- [ ] P10.09 — Cross-compilation toolchain detection
+- [ ] P10.10 — Integration with `aether.toml` for multi-arch builds
+
 ---
 
 ## Legend
@@ -174,10 +186,11 @@
 4. **Phase 3**: Memory management — defer, heap, regions, optionals ✅
 5. **Phase 4**: OOP and type system — classes, traits, generics ✅
 6. **Phase 5**: Advanced language features — exceptions, compile-time, contracts, closures, monomorphization, dynamic dispatch ✅
-7. **Phase 6**: Aether OS integration — sys func, module, attributes, stdlib
+7. **Phase 6**: Aether OS integration — sys func, module, attributes, stdlib ✅
 8. **Phase 7**: Self-hosting — compiler compiles itself
-9. **Phase 8**: Multi-target assembler — NASM → ARM64/RISC-V translation
+9. **Phase 8**: Multi-target assembler — NASM → ARM64/RISC-V translation ✅
 10. **Phase 9**: Optimization & polish — fmt, doc, LSP, benchmarks
+11. **Phase 10**: Universal binary & multi-arch dispatch — fat binaries, CPU detection trampoline
 
 ---
 
