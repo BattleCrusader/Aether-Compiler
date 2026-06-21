@@ -22,6 +22,8 @@ typedef enum {
     TARGET_ASM_X86_64,     /* emit x86_64 NASM assembly listing */
     TARGET_ASM_ARM64,      /* emit ARM64 assembly listing */
     TARGET_ASM_RISCV64,    /* emit RISC-V assembly listing */
+    TARGET_UNIVERSAL,      /* universal binary: x86_64 + ARM64 */
+    TARGET_UNIVERSAL_ALL,  /* universal binary: all architectures */
 } Target;
 
 typedef struct AutoDrop AutoDrop;

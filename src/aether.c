@@ -39,6 +39,11 @@ static void usage(const char *prog) {
     fprintf(stderr, "    module                 Aether OS .ko module\n");
     fprintf(stderr, "    binary                 /bin/ userland ELF at 0x2000000\n");
     fprintf(stderr, "    boot                   Flat binary boot sector\n");
+    fprintf(stderr, "    asm-x86_64             Emit x86_64 NASM assembly listing\n");
+    fprintf(stderr, "    asm-arm64              Emit ARM64 assembly listing\n");
+    fprintf(stderr, "    asm-riscv64            Emit RISC-V assembly listing\n");
+    fprintf(stderr, "    universal              Universal binary (x86_64 + ARM64)\n");
+    fprintf(stderr, "    universal-all          Universal binary (all architectures)\n");
     fprintf(stderr, "  -L, --linker-script <f>  Custom linker script\n");
     fprintf(stderr, "  -S                       Stop after assembly (emit .asm)\n");
     fprintf(stderr, "  --dump-ast               Print AST and exit\n");
@@ -214,6 +219,10 @@ static int parse_target_name(const char *t) {
     if (strcmp(t, "asm-x86_64") == 0)          return (int)TARGET_ASM_X86_64;
     if (strcmp(t, "asm-arm64") == 0)           return (int)TARGET_ASM_ARM64;
     if (strcmp(t, "asm-riscv64") == 0)         return (int)TARGET_ASM_RISCV64;
+    if (strcmp(t, "universal") == 0)           return (int)TARGET_UNIVERSAL;
+    if (strcmp(t, "universal-all") == 0)       return (int)TARGET_UNIVERSAL_ALL;
+    /* Parse "universal-x86_64-arm64" style explicit arch lists */
+    if (strncmp(t, "universal-", 10) == 0)     return (int)TARGET_UNIVERSAL;
     return -1;
 }
 
