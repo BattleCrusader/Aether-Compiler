@@ -2107,7 +2107,24 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         case TARGET_KERNEL:
             nasm_format = "elf64";
             snprintf(obj_file, sizeof(obj_file), "/tmp/aether_kernel.o");
-            link_cmd_prefix = "";
+            /* Use custom linker script if provided, otherwise auto-generate */
+            if (cg->linker_script) {
+                snprintf(ld_cmd_buf, sizeof(ld_cmd_buf), LD " -T %s -o", cg->linker_script);
+                link_cmd_prefix = ld_cmd_buf;
+            } else {
+                FILE *ldf = fopen("/tmp/aether_ld.ld", "w");
+                if (ldf) {
+                    fprintf(ldf, "OUTPUT_FORMAT(elf64-x86-64)\nENTRY(_start)\nSECTIONS {\n");
+                    fprintf(ldf, "  . = 0x1000000;\n");
+                    fprintf(ldf, "  .text : ALIGN(16) { *(.text) *(.text.*) }\n");
+                    fprintf(ldf, "  .rodata : ALIGN(16) { *(.rodata) *(.rodata.*) }\n");
+                    fprintf(ldf, "  .data : ALIGN(16) { *(.data) *(.data.*) }\n");
+                    fprintf(ldf, "  .bss : ALIGN(16) { *(.bss) *(.bss.*) *(COMMON) }\n");
+                    fprintf(ldf, "  /DISCARD/ : { *(.comment) *(.note.*) *(.eh_frame) *(.eh_frame_hdr) }\n}\n");
+                    fclose(ldf);
+                }
+                link_cmd_prefix = LD " -T /tmp/aether_ld.ld -o";
+            }
             break;
         case TARGET_MODULE:
             nasm_format = "elf64";
