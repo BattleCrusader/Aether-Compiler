@@ -279,15 +279,15 @@ let custom = Error::InvalidInput("bad data")
 class Counter {
     value: u64
 
-    func new(self): Counter {
+    func new(): Counter {
         return Counter { value: 0 }
     }
 
-    func increment(self) {
+    func increment() {
         self.value += 1
     }
 
-    func get(self): u64 {
+    func get(): u64 {
         return self.value
     }
 }
@@ -297,8 +297,8 @@ class Counter {
 
 ```aether
 trait Drawable {
-    func draw(self)
-    func area(self): f64
+    func draw()
+    func area(): f64
 }
 
 impl Drawable for Circle {
@@ -644,22 +644,26 @@ func read_config() {
 
 ### 9.1 Struct Methods
 
+Methods defined inside a struct or class body automatically receive `self` as the first parameter. You never write `self` in the parameter list — it's always implied.
+
 ```aether
 struct Point {
     x: u64
     y: u64
-}
 
-func distance(self: Point, other: Point): f64 {
-    let dx = self.x - other.x
-    let dy = self.y - other.y
-    return sqrt(dx*dx + dy*dy)
+    func distance(other: Point): f64 {
+        let dx = self.x - other.x
+        let dy = self.y - other.y
+        return sqrt(dx*dx + dy*dy)
+    }
 }
 
 let p1 = Point { x: 0, y: 0 }
 let p2 = Point { x: 3, y: 4 }
 let d = p1.distance(p2)  // 5.0
 ```
+
+The compiler injects `self: ref StructName` as the first parameter automatically. Inside the method body, `self` refers to the instance the method was called on.
 
 ### 9.2 Classes
 
@@ -677,11 +681,11 @@ class Buffer {
         }
     }
 
-    func drop(self) {
+    func drop() {
         heap_free(self.data)
     }
 
-    func write(self, data: *u8, len: u64) {
+    func write(data: *u8, len: u64) {
         memcpy(self.data, data, len)
     }
 }
@@ -722,12 +726,12 @@ class Dog : Animal {
 
 ```aether
 trait Serializable {
-    func serialize(self): [u8]
+    func serialize(): [u8]
     func deserialize(data: [u8]): Self
 }
 
 impl Serializable for Config {
-    func serialize(self): [u8] {
+    func serialize(): [u8] {
         // serialize fields...
     }
 
@@ -1003,24 +1007,33 @@ let doubled = map(numbers, |x| x * 2)
 
 ### 15.1 Properties
 
+Properties are methods that look like field access. The compiler infers getter/setter from the signature:
+
+- **Getter**: a method with a return type and no extra parameters beyond `self`
+- **Setter**: a method with no return type and one value parameter
+
 ```aether
 class Temperature {
     celsius: f64
 
-    func get fahrenheit(self): f64 {
+    // Getter: has return type, no extra params
+    func fahrenheit(self): f64 {
         return self.celsius * 9.0 / 5.0 + 32.0
     }
 
-    func set fahrenheit(self, value: f64) {
+    // Setter: no return type, takes a value param
+    func fahrenheit(self, value: f64) {
         self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 }
 
 let t = Temperature { celsius: 100 }
-print(t.fahrenheit)  // 212.0
-t.fahrenheit = 32
+print(t.fahrenheit)  // 212.0 — calls getter
+t.fahrenheit = 32    // calls setter
 print(t.celsius)      // 0.0
 ```
+
+No `get`/`set` keywords needed — the return type tells the compiler everything.
 
 ### 15.2 Operator Overloading
 
@@ -1133,7 +1146,7 @@ func halt() {
 
 ```aether
 func cpuid(): (u64, u64, u64, u64) {
-    asm -> (eax, ebx, ecx, edx) {
+    asm: (eax, ebx, ecx, edx) {
         mov rax, 0
         cpuid
     }

@@ -1,4 +1,5 @@
 #include "aether/parser.h"
+#include "aether/str.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -144,12 +145,13 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
         while (parser_match(p, TOKEN_NEWLINE));
     }
 
-    /* Handle pub/private/internal/static modifiers */
+    /* Handle pub/private/internal/static/inline modifiers */
     bool is_pub = parser_match(p, TOKEN_KW_PUB);
     bool is_private = parser_match(p, TOKEN_KW_PRIVATE);
     bool is_internal = parser_match(p, TOKEN_KW_INTERNAL);
     bool is_static = parser_match(p, TOKEN_KW_STATIC);
     bool is_test = parser_match(p, TOKEN_KW_TEST);
+    bool is_inline = parser_match(p, TOKEN_KW_INLINE);
     AccessLevel access = is_private ? ACCESS_PRIVATE : (is_internal ? ACCESS_INTERNAL : ACCESS_PUB);
 
     if (parser_match(p, TOKEN_KW_FUNC)) {
@@ -159,6 +161,7 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             func->data.func.is_pub = is_pub;
             func->data.func.is_static = is_static;
             func->data.func.is_test = is_test;
+            func->data.func.is_inline = is_inline;
             /* Apply @export if the last attribute was export */
             if (last_attr) {
                 const char *aname = arena_strndup(p->arena,
@@ -166,6 +169,10 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     last_attr->data.ident.name.len);
                 if (strcmp(aname, "export") == 0) {
                     func->data.func.is_exported = true;
+                } else if (strcmp(aname, "force_inline") == 0) {
+                    func->data.func.is_force_inline = true;
+                } else if (strcmp(aname, "no_inline") == 0) {
+                    func->data.func.is_no_inline = true;
                 } else if (strcmp(aname, "entry") == 0) {
                     func->data.func.entry_addr = last_attr->data.attr.int_value;
                 } else if (strcmp(aname, "layout") == 0) {
@@ -493,6 +500,16 @@ AstNode *parse_func_decl(Parser *p) {
     /* Body */
     if (parser_match(p, TOKEN_LBRACE)) {
         func->data.func.body = parse_block_braced(p);
+    } else if (parser_match(p, TOKEN_ARROW)) {
+        /* Expression-bodied function: func name(): type -> expr */
+        AstNode *expr = parse_expr(p);
+        if (expr) {
+            /* Wrap the expression in a block with a return statement */
+            AstNode *block = node_block(p->arena, func->loc);
+            AstNode *ret = node_return(p->arena, expr->loc, expr);
+            node_list_append(&block->data.list, ret);
+            func->data.func.body = block;
+        }
     } else {
         /* No body = function declaration only (extern) */
     }
@@ -564,7 +581,21 @@ AstNode *parse_struct_decl(Parser *p) {
             if (parser_check(p, TOKEN_KW_FUNC)) {
                 parser_advance(p);
                 AstNode *method = parse_func_decl(p);
-                if (method) node_list_append(&st->data.struct_decl.methods, method);
+                if (method) {
+                    /* Auto-inject 'self' as the first parameter for methods.
+                     * The user writes: func fahrenheit(): f64 { return self.celsius * ... }
+                     * The parser adds: self: ref StructName as the first param. */
+                    AstNode *self_param = node_param(p->arena, method->loc,
+                        node_ident(p->arena, method->loc, SV("self")),
+                        NULL, false, false);
+                    /* Prepend self to the param list */
+                    AstNodeList new_params = {0};
+                    node_list_append(&new_params, self_param);
+                    for (int pi = 0; pi < method->data.func.params.count; pi++)
+                        node_list_append(&new_params, method->data.func.params.items[pi]);
+                    method->data.func.params = new_params;
+                    node_list_append(&st->data.struct_decl.methods, method);
+                }
                 continue;
             }
 
@@ -921,7 +952,14 @@ AstNode *parse_statement(Parser *p) {
 
     /* unsafe block */
     if (parser_match(p, TOKEN_KW_UNSAFE)) {
-        return parse_statement(p);
+        AstNode *body = parse_statement(p);
+        if (body) {
+            AstNode *unsafe_node = node_create(p->arena, NODE_UNSAFE, body->loc);
+            /* Wrap the body in the unsafe node's list */
+            node_list_append(&unsafe_node->data.list, body);
+            return unsafe_node;
+        }
+        return body;
     }
 
     /* try { body } catch Type(var) { handler } ... */
