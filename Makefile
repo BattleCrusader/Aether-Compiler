@@ -6,6 +6,12 @@ BUILD_DIR = build
 SRC_DIR = src
 TEST_DIR = tests
 
+# Installation paths
+PREFIX     ?= /usr/local
+BINDIR     ?= $(PREFIX)/bin
+LIBDIR     ?= $(PREFIX)/lib/aether
+MANDIR     ?= $(PREFIX)/share/man/man1
+
 CORE_SRCS = \
 	src/arena.c \
 	src/vector.c \
@@ -26,7 +32,7 @@ CORE_SRCS = \
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
 
-.PHONY: all clean test tokenizer parser-test aether-cli
+.PHONY: all clean test tokenizer parser-test aether-cli install uninstall
 
 all: tokenizer parser-test aether-cli
 
@@ -62,7 +68,7 @@ tokenizer: $(BUILD_DIR)/test_tokenizer
 parser-test: $(BUILD_DIR)/test_parser
 aether-cli: $(BUILD_DIR)/aether
 
-test: tokenizer parser-test
+test: tokenizer parser-test $(BUILD_DIR)/test_asm
 	@echo "=== Tokenizer Tests ==="
 	@$(BUILD_DIR)/test_tokenizer
 	@echo ""
@@ -173,6 +179,44 @@ test-layout: aether-cli
 	echo ""; \
 	echo "=== Results: $$pass/$$total passed, $$((total - pass)) failed ==="; \
 	[ $$pass -eq $$total ]
+
+# Install the aether compiler and standard library to the system
+install: aether-cli
+	@echo "Installing Aether compiler..."
+	install -d $(DESTDIR)$(BINDIR)
+	install -m 755 $(BUILD_DIR)/aether $(DESTDIR)$(BINDIR)/aether
+	@echo "  -> $(DESTDIR)$(BINDIR)/aether"
+	@echo "Installing standard library..."
+	install -d $(DESTDIR)$(LIBDIR)
+	for f in std/*.ae; do \
+		install -m 644 $$f $(DESTDIR)$(LIBDIR)/$$(basename $$f); \
+		echo "  -> $(DESTDIR)$(LIBDIR)/$$(basename $$f)"; \
+	done
+	@echo "Installing header files..."
+	install -d $(DESTDIR)$(LIBDIR)/include
+	for f in include/aether/*.h; do \
+		install -m 644 $$f $(DESTDIR)$(LIBDIR)/include/$$(basename $$f); \
+		echo "  -> $(DESTDIR)$(LIBDIR)/include/$$(basename $$f)"; \
+	done
+	@echo ""
+	@echo "Aether compiler installed successfully."
+	@echo "  Binary:  $(DESTDIR)$(BINDIR)/aether"
+	@echo "  Stdlib:  $(DESTDIR)$(LIBDIR)/"
+	@echo ""
+	@echo "To use: aether --help"
+	@echo "To compile: aether build source.ae"
+	@echo "To run:    aether run source.ae"
+
+# Uninstall the aether compiler and standard library
+uninstall:
+	@echo "Removing Aether compiler..."
+	rm -f $(DESTDIR)$(BINDIR)/aether
+	@echo "  -> $(DESTDIR)$(BINDIR)/aether (removed)"
+	@echo "Removing standard library..."
+	rm -rf $(DESTDIR)$(LIBDIR)
+	@echo "  -> $(DESTDIR)$(LIBDIR)/ (removed)"
+	@echo ""
+	@echo "Aether compiler uninstalled."
 
 clean:
 	rm -rf $(BUILD_DIR)
