@@ -1490,10 +1490,61 @@ static void cg_func(Codegen *cg, AstNode *func) {
         cg_stmt(cg, func->data.func.body, slots);
     }
 
-    /* Default return — for throws functions, clear error tag */
-    cg_comment(cg, "default return");
-    if (func->data.func.is_throws) {
-        cg_inst(cg, "xor rdx, rdx");  /* clear error tag = success */
+    /* Default return — only if the body didn't already return */
+    /* Check if the last statement is a return */
+    int body_has_return = 0;
+    if (func->data.func.body && func->data.func.body->type == NODE_RETURN) {
+        body_has_return = 1;
+    }
+    /* Also check if body is a block whose last statement is a return */
+    if (func->data.func.body && func->data.func.body->type == NODE_BLOCK) {
+        AstNodeList *stmts = &func->data.func.body->data.list;
+        if (stmts->count > 0) {
+            AstNode *last = stmts->items[stmts->count - 1];
+            if (last->type == NODE_RETURN) {
+                body_has_return = 1;
+            }
+            /* If the last statement is an asm block, check if it contains ret */
+            if (last->type == NODE_ASM_BLOCK && last->data.asm_block.text) {
+                StringView asm_text = last->data.asm_block.text->data.literal.string_val;
+                const char *p = asm_text.data;
+                const char *end = p + asm_text.len;
+                while (p < end) {
+                    /* Check for 'ret' as a word on its own line */
+                    if ((p == asm_text.data || *(p-1) == '\n') &&
+                        end - p >= 3 && p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
+                        (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t')) {
+                        body_has_return = 1;
+                        break;
+                    }
+                    p++;
+                }
+            }
+        }
+    }
+    /* Also check if body itself is an asm block with ret */
+    if (func->data.func.body && func->data.func.body->type == NODE_ASM_BLOCK) {
+        AstNode *last = func->data.func.body;
+        if (last->data.asm_block.text) {
+            StringView asm_text = last->data.asm_block.text->data.literal.string_val;
+            const char *p = asm_text.data;
+            const char *end = p + asm_text.len;
+            while (p < end) {
+                if ((p == asm_text.data || *(p-1) == '\n') &&
+                    end - p >= 3 && p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
+                    (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t')) {
+                    body_has_return = 1;
+                    break;
+                }
+                p++;
+            }
+        }
+    }
+    if (!body_has_return) {
+        cg_comment(cg, "default return");
+        if (func->data.func.is_throws) {
+            cg_inst(cg, "xor rdx, rdx");  /* clear error tag = success */
+        }
     }
 
     /* Post-conditions: check before defers (save return value first) */
