@@ -129,7 +129,7 @@
 - [x] P08.08 — Directive translation (align, section, etc.) 🟢
 - [x] P08.09 — Pseudo-instruction expansion 🟢
 - [x] P08.10 — Multi-target test suite (same NASM source → multiple architectures) 🟢
-- [ ] P08.11 — Integration with `--target` CLI flag
+- [x] P08.11 — Integration with `--target` CLI flag 🟢
 
 ## Phase 9 — Optimization & Polish 🔴 NOT STARTED
 - [ ] P09.01 — Constant folding and propagation

@@ -19,6 +19,9 @@ typedef enum {
     TARGET_MODULE,         /* .ko module ELF for Aether OS */
     TARGET_BINARY,         /* /bin/ userland ELF at 0x2000000 */
     TARGET_BOOT,           /* flat binary boot sector */
+    TARGET_ASM_X86_64,     /* emit x86_64 NASM assembly listing */
+    TARGET_ASM_ARM64,      /* emit ARM64 assembly listing */
+    TARGET_ASM_RISCV64,    /* emit RISC-V assembly listing */
 } Target;
 
 typedef struct AutoDrop AutoDrop;

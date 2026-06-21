@@ -36,7 +36,7 @@ static int passed_tests = 0;
 static void test_parse_mov(void) {
     TEST("parse mov rax, 42");
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string("    mov rax, 42\n", &block, "test.asm");
 
     if (!ok) { FAIL("parse failed"); return; }
@@ -55,7 +55,7 @@ static void test_parse_mov(void) {
 static void test_parse_memory(void) {
     TEST("parse mov rax, [rbp+8]");
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string("    mov rax, [rbp+8]\n", &block, "test.asm");
 
     if (!ok) { FAIL("parse failed"); return; }
@@ -74,7 +74,7 @@ static void test_parse_memory(void) {
 static void test_parse_label(void) {
     TEST("parse label");
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string("loop:\n    nop\n", &block, "test.asm");
 
     if (!ok) { FAIL("parse failed"); return; }
@@ -89,7 +89,7 @@ static void test_parse_label(void) {
 static void test_parse_directive(void) {
     TEST("parse section directive");
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string("section .text\n", &block, "test.asm");
 
     if (!ok) { FAIL("parse failed"); return; }
@@ -109,7 +109,7 @@ static void test_x86_64_roundtrip(void) {
                          "    mov [rbp-8], rax\n"
                          "    ret\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -138,7 +138,7 @@ static void test_arm64_output(void) {
                          "    add rax, rbx\n"
                          "    ret\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -165,7 +165,7 @@ static void test_riscv64_output(void) {
                          "    add rax, rbx\n"
                          "    ret\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -205,7 +205,7 @@ static void test_bootsector(void) {
         "    db \"Hello\", 0\n"
         "    dw 0xAA55\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "boot.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -230,7 +230,7 @@ static void test_addressing_modes(void) {
         "    mov rax, [rbx+rcx*4+16]\n"
         "    mov rax, [rel message]\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -256,7 +256,7 @@ static void test_data_directives(void) {
         "    dq 0xDEADBEEF\n"
         "    resb 64\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -277,7 +277,7 @@ static void test_arm64_push_pop(void) {
 
     const char *source = "    push rax\n    pop rbx\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -299,7 +299,7 @@ static void test_riscv_push_pop(void) {
 
     const char *source = "    push rax\n    pop rbx\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 
@@ -321,7 +321,7 @@ static void test_cond_jumps(void) {
 
     const char *source = "    jz .done\n    jnz .loop\n    jg .greater\n";
 
-    AsmBlock block;
+    AsmIRBlock block;
     int ok = asm_parse_string(source, &block, "test.asm");
     if (!ok) { FAIL("parse failed"); return; }
 

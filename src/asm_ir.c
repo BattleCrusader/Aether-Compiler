@@ -196,13 +196,13 @@ int asm_reg_is_callee_saved(AsmRegister reg) {
     return asm_reg_table[reg].is_callee_saved;
 }
 
-void asm_block_init(AsmBlock *block) {
-    memset(block, 0, sizeof(AsmBlock));
+void asm_block_init(AsmIRBlock *block) {
+    memset(block, 0, sizeof(AsmIRBlock));
     block->capacity = 16;
     block->elements = (AsmElement *)calloc(block->capacity, sizeof(AsmElement));
 }
 
-void asm_block_free(AsmBlock *block) {
+void asm_block_free(AsmIRBlock *block) {
     if (block->elements) {
         free(block->elements);
         block->elements = NULL;
@@ -211,7 +211,7 @@ void asm_block_free(AsmBlock *block) {
     block->capacity = 0;
 }
 
-int asm_block_add(AsmBlock *block, const AsmElement *elem) {
+int asm_block_add(AsmIRBlock *block, const AsmElement *elem) {
     if (block->count >= block->capacity) {
         int new_cap = block->capacity * 2;
         AsmElement *new_elems = (AsmElement *)realloc(block->elements, new_cap * sizeof(AsmElement));

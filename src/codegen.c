@@ -1,5 +1,7 @@
 #include "aether/codegen.h"
 #include "aether/str.h"
+#include "aether/asm_ir.h"
+#include "aether/asm_parser.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1875,6 +1877,55 @@ static void cg_defer_clear(Codegen *cg) {
  * ================================================================ */
 
 int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file) {
+    /* ASM listing targets: parse NASM output and re-emit through multi-target backend */
+    if (cg->target == TARGET_ASM_X86_64 || cg->target == TARGET_ASM_ARM64 || cg->target == TARGET_ASM_RISCV64) {
+        FILE *f = fopen(asm_file, "rb");
+        if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", asm_file); return 1; }
+        fseek(f, 0, SEEK_END);
+        long flen = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        char *src = (char *)malloc((size_t)flen + 1);
+        if (!src) { fclose(f); return 1; }
+        size_t rlen = fread(src, 1, (size_t)flen, f);
+        src[rlen] = '\0';
+        fclose(f);
+
+        AsmIRBlock block;
+        if (!asm_parse_string(src, &block, asm_file)) {
+            fprintf(stderr, "Error: failed to parse generated NASM\n");
+            free(src);
+            asm_block_free(&block);
+            return 1;
+        }
+        free(src);
+
+        AsmBackend *backend = NULL;
+        if (cg->target == TARGET_ASM_X86_64) {
+            extern AsmBackend *asm_backend_create_x86_64(void);
+            backend = asm_backend_create_x86_64();
+        } else if (cg->target == TARGET_ASM_ARM64) {
+            extern AsmBackend *asm_backend_create_arm64(void);
+            backend = asm_backend_create_arm64();
+        } else {
+            extern AsmBackend *asm_backend_create_riscv64(void);
+            backend = asm_backend_create_riscv64();
+        }
+        if (!backend) { fprintf(stderr, "Error: failed to create ASM backend\n"); asm_block_free(&block); return 1; }
+
+        size_t out_len;
+        char *output = backend->emit(&block, &out_len);
+        if (!output) { fprintf(stderr, "Error: backend emit failed\n"); backend->destroy(output); asm_block_free(&block); return 1; }
+
+        FILE *outf = fopen(output_file, "w");
+        if (!outf) { fprintf(stderr, "Error: cannot write '%s'\n", output_file); backend->destroy(output); asm_block_free(&block); return 1; }
+        fwrite(output, 1, out_len, outf);
+        fclose(outf);
+
+        backend->destroy(output);
+        asm_block_free(&block);
+        return 0;
+    }
+
     /* Step 1: Determine nasm format and output object path */
     char obj_file[1024];
     const char *nasm_format;
