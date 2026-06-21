@@ -190,13 +190,19 @@
 - [x] P14.02 — Verify kernel boots and blocks at read_line waiting for input 🟢
 - [x] P14.03 — Uncomment `if cmd != 0 { exec_cmd(cmd) }` in shell_main 🟢
 - [x] P14.04 — Verify shell accepts commands and loops correctly 🟢
-- [ ] P14.05 — Wire up command registration (help, ls, echo, reboot binaries)
-- [ ] P14.06 — Implement ATA PIO disk read for binary loading
-- [ ] P14.07 — Implement ELF64 binary loader in kernel
-- [ ] P14.08 — Implement boot filesystem (AetherFS) read support
-- [ ] P14.09 — Implement `fs_read` for disk-backed files
-- [ ] P14.10 — Implement `fs_readdir` for directory listing
-- [ ] P14.11 — Phase 14 Verification & Cleanup
+- [x] P14.05 — Fix serial_newline: was passing args in `al` instead of `dil` (SysV ABI) 🟢
+- [x] P14.06 — Fix backspace: handle 0x08 and 0x7F, send ANSI erase sequence 🟢
+- [x] P14.07 — Fix exec_cmd: extract first word from input before command lookup 🟢
+- [x] P14.08 — Add inline command handlers: help, ls, echo, reboot, shutdown, clear, mem 🟢
+- [x] P14.09 — Add shutdown command with ACPI/QEMU/Bochs methods 🟢
+- [x] P14.10 — Clean up debug scaffolding (C kernel, NASM test kernels) 🟢
+- [ ] P14.11 — Wire up command registration (help, ls, echo, reboot binaries)
+- [ ] P14.12 — Implement ATA PIO disk read for binary loading
+- [ ] P14.13 — Implement ELF64 binary loader in kernel
+- [ ] P14.14 — Implement boot filesystem (AetherFS) read support
+- [ ] P14.15 — Implement `fs_read` for disk-backed files
+- [ ] P14.16 — Implement `fs_readdir` for directory listing
+- [ ] P14.17 — Phase 14 Verification & Cleanup
 
 ## Phase 15 — OS Memory & Process Management 🔴 NOT STARTED
 - [ ] P15.01 — Virtual memory manager (paging, page faults)
