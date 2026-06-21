@@ -2,6 +2,7 @@
 #include "aether/str.h"
 #include "aether/asm_ir.h"
 #include "aether/asm_parser.h"
+#include "aether/universal.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -87,6 +88,11 @@ const char *target_name(Target t) {
         case TARGET_MODULE:       return "Aether OS module (.ko)";
         case TARGET_BINARY:       return "Aether OS binary ELF64 (0x2000000)";
         case TARGET_BOOT:         return "flat binary boot sector";
+        case TARGET_ASM_X86_64:  return "x86_64 NASM assembly listing";
+        case TARGET_ASM_ARM64:   return "ARM64 assembly listing";
+        case TARGET_ASM_RISCV64: return "RISC-V assembly listing";
+        case TARGET_UNIVERSAL:   return "universal binary (x86_64 + ARM64)";
+        case TARGET_UNIVERSAL_ALL: return "universal binary (all architectures)";
     }
     return "unknown";
 }
@@ -1650,6 +1656,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             const char *entry;
             if (is_macho) {
                 entry = "_aether_entry";  /* Mach-O: custom entry, linker -e flag */
+            } else if (cg->target == TARGET_UNIVERSAL || cg->target == TARGET_UNIVERSAL_ALL) {
+                entry = "_aether_entry";  /* Universal: trampoline defines _start, jumps to _aether_entry */
             } else {
                 entry = "_start";          /* ELF: ENTRY(_start) in linker script */
             }
@@ -1877,6 +1885,87 @@ static void cg_defer_clear(Codegen *cg) {
  * ================================================================ */
 
 int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file) {
+    /* Universal binary targets: compile for multiple architectures and merge */
+    if (cg->target == TARGET_UNIVERSAL || cg->target == TARGET_UNIVERSAL_ALL) {
+        /* Read the generated x86_64 NASM */
+        FILE *f = fopen(asm_file, "rb");
+        if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", asm_file); return 1; }
+        fseek(f, 0, SEEK_END);
+        long flen = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        char *src = (char *)malloc((size_t)flen + 1);
+        if (!src) { fclose(f); return 1; }
+        size_t rlen = fread(src, 1, (size_t)flen, f);
+        src[rlen] = '\0';
+        fclose(f);
+
+        /* Parse the NASM into IR */
+        AsmIRBlock block;
+        if (!asm_parse_string(src, &block, asm_file)) {
+            fprintf(stderr, "Error: failed to parse generated NASM\n");
+            free(src);
+            asm_block_free(&block);
+            return 1;
+        }
+        free(src);
+
+        /* Create universal builder */
+        UniversalConfig config;
+        universal_config_init(&config);
+        if (cg->target == TARGET_UNIVERSAL_ALL) {
+            config.arch_flags = (1 << ARCH_X86_64) | (1 << ARCH_ARM64) | (1 << ARCH_RISCV64);
+        } else {
+            config.arch_flags = (1 << ARCH_X86_64) | (1 << ARCH_ARM64);
+        }
+        config.verbose = 1;
+
+        UniversalBuilder *builder = universal_builder_create(&config);
+        if (!builder) { asm_block_free(&block); return 1; }
+
+        /* Emit x86_64 NASM (passthrough) */
+        {
+            extern AsmBackend *asm_backend_create_x86_64(void);
+            AsmBackend *backend = asm_backend_create_x86_64();
+            if (!backend) { universal_builder_destroy(builder); asm_block_free(&block); return 1; }
+            size_t out_len;
+            char *output = backend->emit(&block, &out_len);
+            if (!output) { backend->destroy(output); universal_builder_destroy(builder); asm_block_free(&block); return 1; }
+            universal_builder_add_asm(builder, ARCH_X86_64, output, out_len);
+            backend->destroy(output);
+        }
+
+        /* Emit ARM64 */
+        if (config.arch_flags & (1 << ARCH_ARM64)) {
+            extern AsmBackend *asm_backend_create_arm64(void);
+            AsmBackend *backend = asm_backend_create_arm64();
+            if (!backend) { universal_builder_destroy(builder); asm_block_free(&block); return 1; }
+            size_t out_len;
+            char *output = backend->emit(&block, &out_len);
+            if (!output) { backend->destroy(output); universal_builder_destroy(builder); asm_block_free(&block); return 1; }
+            universal_builder_add_asm(builder, ARCH_ARM64, output, out_len);
+            backend->destroy(output);
+        }
+
+        /* Emit RISC-V */
+        if (config.arch_flags & (1 << ARCH_RISCV64)) {
+            extern AsmBackend *asm_backend_create_riscv64(void);
+            AsmBackend *backend = asm_backend_create_riscv64();
+            if (!backend) { universal_builder_destroy(builder); asm_block_free(&block); return 1; }
+            size_t out_len;
+            char *output = backend->emit(&block, &out_len);
+            if (!output) { backend->destroy(output); universal_builder_destroy(builder); asm_block_free(&block); return 1; }
+            universal_builder_add_asm(builder, ARCH_RISCV64, output, out_len);
+            backend->destroy(output);
+        }
+
+        asm_block_free(&block);
+
+        /* Build the universal binary */
+        int ret = universal_build(builder, output_file);
+        universal_builder_destroy(builder);
+        return ret;
+    }
+
     /* ASM listing targets: parse NASM output and re-emit through multi-target backend */
     if (cg->target == TARGET_ASM_X86_64 || cg->target == TARGET_ASM_ARM64 || cg->target == TARGET_ASM_RISCV64) {
         FILE *f = fopen(asm_file, "rb");

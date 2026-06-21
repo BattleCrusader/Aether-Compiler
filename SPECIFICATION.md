@@ -1,2637 +1,1604 @@
-# Aether Language Specification v0.2
+# Aether Language Specification
 
-*A fourth-generation systems language for the Aether Operating System*
+**Version**: 0.4 (Phase 10 — Universal Binary)
+**Status**: Living Document
 
 ---
 
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
-2. [Lexical Structure](#2-lexical-structure)
-3. [Types](#3-types)
-4. [Variables and Constants](#4-variables-and-constants)
-5. [Functions](#5-functions)
-6. [Control Flow](#6-control-flow)
-7. [Memory Model](#7-memory-model)
-8. [Reference System](#8-reference-system)
-9. [Structs](#9-structs)
-10. [Enums and Pattern Matching](#10-enums-and-pattern-matching)
-11. [Classes](#11-classes)
-12. [Traits](#12-traits)
-13. [Generics](#13-generics)
-14. [Exception Handling](#14-exception-handling)
-15. [NASM Inline Assembly](#15-nasm-inline-assembly)
-    - [15.7 Universal Binaries](#157-universal-binaries-multi-arch-dispatch)
-16. [Aether OS Integration](#16-aether-os-integration)
-17. [Compile-Time Execution](#17-compile-time-execution)
-18. [Contract Programming](#18-contract-programming)
-19. [Declarative Resources](#19-declarative-resources)
-20. [Build System](#20-build-system)
-21. [Testing](#21-testing)
-22. [Standard Library](#22-standard-library)
-23. [Appendix: Grammar](#23-appendix-grammar)
+2. [Design Philosophy](#2-design-philosophy)
+3. [Lexical Structure](#3-lexical-structure)
+4. [Types](#4-types)
+5. [Variables and Bindings](#5-variables-and-bindings)
+6. [Functions](#6-functions)
+7. [Control Flow](#7-control-flow)
+8. [Memory Management](#8-memory-management)
+9. [Object-Oriented Programming](#9-object-oriented-programming)
+10. [Generics](#10-generics)
+11. [Error Handling](#11-error-handling)
+12. [Compile-Time Execution](#12-compile-time-execution)
+13. [Contract Programming](#13-contract-programming)
+14. [Closures and Lambdas](#14-closures-and-lambdas)
+15. [Properties and Operator Overloading](#15-properties-and-operator-overloading)
+16. [Dynamic Dispatch](#16-dynamic-dispatch)
+17. [Inline Assembly](#17-inline-assembly)
+18. [Aether OS Integration](#18-aether-os-integration)
+19. [Multi-Target Assembler](#19-multi-target-assembler)
+20. [Universal Binaries](#20-universal-binaries)
+21. [Standard Library](#21-standard-library)
+22. [Build System](#22-build-system)
+23. [Compiler Targets](#23-compiler-targets)
 
 ---
 
 ## 1. Introduction
 
-Aether is a compiled, statically-typed, fourth-generation language for systems programming on the Aether OS. It combines the readability of Python, the safety of Rust, and the bare-metal control of C with NASM — all without a runtime, garbage collector, or interpreter.
+Aether is a systems programming language designed for building operating systems, kernels, bootloaders, and high-performance userland applications. It compiles directly to native code through NASM assembly — no LLVM, no interpreter, no runtime GC.
 
-### 1.1 Design Goals
+The language combines the readability of Python with the control of C and the safety of Rust, while adding unique features like compile-time execution, contract programming, and a multi-target assembler that can translate the same source to x86_64, ARM64, and RISC-V.
 
-| Goal | How Aether achieves it |
-|------|----------------------|
-| Productivity | Indentation-based syntax, powerful type inference, pattern matching, query-style pipelines |
-| Safety | No null, ownership system, automatic memory management, contract programming |
-| Zero-cost | Stack-first allocation, monomorphized generics, static dispatch by default, escape analysis |
-| Hardware intimacy | NASM inline assembly, memory layout directives, syscall-page integration |
-| Self-hosting | Compiler written in Aether by Phase 6, bootstrap via C |
-| OS-native | `sys func`, `module`, `@entry`, `@layout` — the compiler knows the Aether OS architecture |
-
-### 1.2 Hello, Aether
+### 1.1 Hello, World
 
 ```aether
-# hello.ae — your first Aether program
-func main() {
-    print("Hello, Aether!\n")
+func main(): u64 {
+    print("Hello, Aether!")
+    return 0
 }
 ```
 
-Compile and run:
+### 1.2 Compilation
 
-```
-aether build --target x86_64-freestanding --output hello.elf
-# or directly:
+```bash
+# Compile for the host system
+aether hello.ae -o hello
+
+# Compile for Aether OS kernel
+aether --target kernel kernel.ae -o kernel.elf
+
+# Compile as a universal binary (x86_64 + ARM64)
+aether --target universal hello.ae -o hello.ub
+
+# Compile and run in one step
 aether run hello.ae
 ```
 
-### 1.3 Hello, Kernel Module
+---
 
-```aether
-module hello_kernel {
-    @export func mod_init() int {
-        print("Hello from kernel module!\n")
-        return 0  # success
-    }
-    
-    @export func mod_fini() {
-        print("Goodbye from kernel module!\n")
-    }
-}
-```
+## 2. Design Philosophy
 
-### 1.4 Hello, Boot Sector (512 bytes)
+### 2.1 Core Principles
 
-```aether
-@layout(start=0x7C00, max=512, file="stage1.bin")
-func stage1() {
-    asm {
-        [org 0x7C00]
-        mov ax, 0
-        mov ds, ax
-        mov es, ax
-        mov ss, ax
-        mov sp, 0x7C00
-        
-        mov si, msg
-        call print_string
-        jmp $
-        
-print_string:
-        lodsb
-        or al, al
-        jz .done
-        mov ah, 0x0E
-        int 0x10
-        jmp print_string
-.done:
-        ret
-        
-msg: db "Aether boot!", 0
-        
-        times 510-($-$$) db 0
-        dw 0xAA55
-    }
-}
-```
+1. **Readability first** — Syntax should be immediately understandable. No sigils, no cryptic operators, no template metaprogramming.
+
+2. **Zero-cost abstractions** — High-level features (classes, generics, exceptions) compile down to the same assembly you'd write by hand. You never pay for what you don't use.
+
+3. **Automatic memory management, no GC** — Memory is managed at compile time through escape analysis, region inference, and deterministic scope-based deallocation. No garbage collector, no reference counting overhead.
+
+4. **No interpreter** — Aether compiles directly to native code. There is no VM, no JIT, no bytecode. The compiler itself is written in C (bootstrap) and will eventually be self-hosting.
+
+5. **OS-native from day one** — The language is designed alongside the Aether OS. Every feature exists because the OS needs it: syscall tables, kernel modules, boot sectors, flat binaries.
+
+6. **Multi-architecture by default** — The same source code can target x86_64, ARM64, and RISC-V. The multi-target assembler translates NASM instructions between architectures automatically.
+
+### 2.2 What Makes Aether Unique
+
+- **Compile-time `#run` blocks** execute code during compilation, enabling metaprogramming without a separate macro system
+- **Contract programming** with `pre()` and `post()` conditions checked in debug builds, eliminated in release
+- **Multi-target assembler** translates NASM assembly to ARM64 and RISC-V automatically
+- **Universal binaries** contain native code for multiple architectures with a CPU detection trampoline
+- **Deterministic exceptions** use tagged union returns — no unwinding tables, no personality functions
+- **Region-based allocation** with `region { }` blocks for O(1) arena teardown
+- **`sys func`** for direct syscall page invocation in kernel space
 
 ---
 
-## 2. Lexical Structure
+## 3. Lexical Structure
 
-### 2.1 Comments
+### 3.1 Comments
 
 ```aether
-# Line comment — starts with # and goes to end of line
+// Line comment
 
-#{ Block comment — nestable
-    #{ Nested block comment }#
-    Still inside block comment
-}#
+/* Block comment */
+
+/* Nested /* block */ comments */
 ```
 
-### 2.2 Identifiers
+### 3.2 Identifiers
+
+Identifiers start with a letter or underscore, followed by letters, digits, or underscores:
 
 ```aether
-x                  # valid
-camelCase          # conventional for variables
-PascalCase         # conventional for types, classes, traits
-SCREAMING_CASE     # conventional for constants
-_private           # underscore prefix = module-private
-_special           # special/compiler-intrinsic
+my_variable    // valid
+_private_val   // valid
+camelCase      // valid
+PascalCase     // valid
+2bad           // invalid
 ```
 
-Valid identifiers: `[a-zA-Z_][a-zA-Z0-9_]*`
+### 3.3 Keywords
 
-### 2.3 Literals
+```
+and         as          bool        break       catch
+class       const       continue    defer       dyn
+elif        else        enum        export      extern
+false       for         func        get         heap
+if          impl        import      in          inline
+internal    let         module      mut         none
+not         or          owned       pool        post
+pre         private     protocol    pub         rc
+ref         region      return      self        set
+struct      sys         throw       trait       true
+try         type        u8          u16         u32
+u64         u128        while
+```
+
+### 3.4 Operators
 
 ```aether
-# Integer literals
-42                  # decimal
-0xFF                # hexadecimal
-0b1010              # binary
-0o77                # octal
-1_000_000           # underscores for readability
-0xFFFF_FFFF         # groups of 4 in hex
-'Z'                 # character (u8 ascii value)
-'\n'                # escape sequences in chars
+Arithmetic:     +   -   *   /   %   **
+Comparison:     ==  !=  <   >   <=  >=
+Logical:        &&  ||  !
+Bitwise:        &   |   ^   <<  >>
+Assignment:     =   +=  -=  *=  /=  %=  &=  |=  ^=  <<=  >>=
+Member:         .   ->
+Scope:          ::
+Arrow:          =>
+Range:          ..
+Pattern:        |   ..=
+```
 
-# Float literals
-3.14                # float
-1e10                # scientific
-0xFF.0p-3           # hex float
+### 3.5 Literals
 
-# String literals
-"hello"             # UTF-8 string
-"line one\nline two"  # escape sequences
-"path: {filename}"  # interpolation with {expr}
+```aether
+// Integer literals
+42              // decimal
+0xFF            // hexadecimal
+0o77            // octal
+0b1010          // binary
 
-# Boolean literals
+// Float literals
+3.14
+1.0e-5
+
+// String literals
+"hello, world"
+"escaped: \n \t \\ \" \x41"
+
+// Multi-line strings
+"""
+This is a
+multi-line string
+"""
+
+// Character literals
+'a'
+'\n'
+
+// Boolean literals
 true
 false
 
-# Special literals
-none                # the absence of a value (for optionals)
+// None literal
+none
 ```
 
-### 2.4 Escape Sequences
+### 3.6 Indentation
 
-| Escape | Meaning |
-|--------|---------|
-| `\n` | Newline (0x0A) |
-| `\r` | Carriage return (0x0D) |
-| `\t` | Tab (0x09) |
-| `\\` | Backslash |
-| `\"` | Double quote |
-| `\xNN` | Hex byte |
-| `\u{NNNN}` | Unicode code point |
-
-### 2.5 Indentation
-
-Aether uses significant indentation. Blocks are defined by indentation levels. One level = 4 spaces. Tabs are not allowed.
+Aether uses significant indentation (4 spaces) for block structure, similar to Python:
 
 ```aether
-func example() {
-    print("indented one level\n")
-    if true {
-        print("indented two levels\n")
+func example(): u64 {
+    if condition {
+        do_something()
+    } else {
+        do_other()
     }
-    print("back to one level\n")
-}
-```
-
-### 2.7 Multi-Line Strings
-
-Long strings spanning multiple lines use triple-quotes `"""`:
-
-```aether
-# Multi-line string — preserves newlines and indentation
-let msg = """
-Hello, Aether!
-This is a multi-line string.
-    Indented lines are preserved as-is.
-"""
-
-# Multi-line strings with interpolation
-let name = "world"
-let greeting = """
-Hello, {name}!
-Nice to meet you.
-"""
-
-# Useful for inline assembly templates, format strings, or embedded data
-let boot_msg = """
-Aether OS v0.1
-Boot sequence initiated
-Loading kernel...
-```
-
-### 2.7 Statement Termination
-
-```aether
-# Multi-line expression (continues because line ends with operator)
-let result = 1 + 2 + 3 +
-             4 + 5 + 6
-
-# Multi-line function call
-print("this is a very long string that ",
-      "continues on the next line")
-
-# Explicit continuation with backslash
-print("backslash continues \",
-    "to the next line")
-```
-
----
-
-## 3. Types
-
-### 3.1 Primitive Types
-
-| Type | Size | Description |
-|------|------|-------------|
-| `byte` | 8 bits | Raw byte (unsigned), distinct from `u8` in intent |
-| `u8` | 8 bits | Unsigned 8-bit integer |
-| `u16` | 16 bits | Unsigned 16-bit integer |
-| `u32` | 32 bits | Unsigned 32-bit integer |
-| `u64` | 64 bits | Unsigned 64-bit integer |
-| `i8` | 8 bits | Signed 8-bit integer |
-| `i16` | 16 bits | Signed 16-bit integer |
-| `i32` | 32 bits | Signed 32-bit integer |
-| `i64` | 64 bits | Signed 64-bit integer |
-| `f32` | 32 bits | IEEE 754 single-precision float |
-| `f64` | 64 bits | IEEE 754 double-precision float |
-| `bool` | 8 bits | Boolean (`true` or `false`) — stored as byte |
-| `void` | 0 bits | Unit type, for functions returning nothing |
-
-### 3.2 Compound Types
-
-```aether
-# Arrays (fixed size, stack by default)
-let arr: [u8; 256]           # 256 bytes on stack
-let arr2 = [1, 2, 3, 4, 5]  # inferred: [int; 5]
-
-# Slices (dynamically sized view)
-let slice: [u8]              # slice of bytes (fat pointer: ptr + len)
-let view = arr[10..20]       # slice from array
-
-# Tuples
-let t: (int, string, bool)   # heterogeneous tuple
-let t2 = (42, "hello", true) # inferred
-let (a, b, _) = t2           # destructuring
-
-# String (a slice of bytes guaranteed to be UTF-8)
-let s: string                # shorthand for [byte] that is valid UTF-8
-let s2 = "hello"             # string literal
-```
-
-### 3.3 Optional Types
-
-Aether has no null pointer. Instead, any type can be wrapped in an optional with the `?` suffix. An `int?` is either `some` (holding an int) or `none`. The compiler stores optionals as a tag byte + value, so `u64?` costs 9 bytes at runtime.
-
-```aether
-# Declaring an optional — starts as none by default
-let age: int? = none
-
-# Assigning a value wraps it automatically
-age = 30                      # now holds 30, tag is 'some'
-
-# The type system prevents you from using the value without checking
-# let years = age + 1         # ERROR: can't add int? + int
-
-# if-let pattern binding: unwraps safely, only runs the block if some
-if let actual = age {
-    print("age is {actual}")   # actual is int, not int?
-    # actual only exists inside this block
-}
-
-# Unwrap with a default value
-let display = age or 0        # 30 if some, 0 if none
-
-# Force-unwrap (crashes if none — use sparingly, like a safety valve)
-let risky = age!              # runtime panic if age is none
-
-# Optionals compose with control flow
-for i in 0..100 {
-    let maybe: int? = lookup(i)
-    if let val = maybe {
-        process(val)
-    }
-}
-```
-
-### 3.4 Type Aliases
-
-```aether
-type PageNumber = u64
-type Buffer = [u8; 4096]
-type Result<T> = Ok(T) | Err(string)  # anonymous enum
-
-type GenericList<T> = struct {
-    data: ptr T
-    count: u64
-    capacity: u64
-}
-```
-
-### 3.5 Type Inference
-
-The compiler infers types from context. Explicit annotations are optional except for function signatures and struct fields.
-
-```aether
-let x = 42                    # inferred: int
-let y: u64 = 42               # explicit: u64
-let z = compute()             # inferred from return type of compute()
-
-# In function signatures, all parameters and return types must be annotated
-func add(a: int, b: int): int {
-    return a + b
-}
-
-# But local variables inside the body are inferred
-func example() {
-    let count = get_count()   # inferred
-    let doubled = count * 2   # inferred (u64 from context)
 }
 ```
 
 ---
 
-## 4. Variables and Constants
+## 4. Types
 
-### 4.1 Immutable Variables (Default)
-
-```aether
-let x = 42          # immutable
-# x = 43            # ERROR: cannot assign to immutable variable x
-```
-
-### 4.2 Mutable Variables
+### 4.1 Primitive Types
 
 ```aether
-let mut counter = 0
-counter += 1        # OK: counter is mutable
-
-let mut buf = Buffer()
-buf.fill(0)
+let a: u8 = 255          // unsigned 8-bit
+let b: u16 = 65535       // unsigned 16-bit
+let c: u32 = 4294967295  // unsigned 32-bit
+let d: u64 = 18446744073709551615  // unsigned 64-bit
+let e: bool = true       // boolean
 ```
 
-### 4.3 Constants
+### 4.2 Compound Types
 
 ```aether
-const MAX_BUFFER_SIZE = 4096
-const PI: f64 = 3.14159265359
-const PAGE_SIZE: u64 = 0x1000
+// Arrays
+let arr: [u64; 4] = [1, 2, 3, 4]
+let dyn_arr: [u64]      // dynamic array (slice)
+
+// Pointers
+let ptr: *u64 = &value
+let null_ptr: *u64 = none
+
+// References (preferred over pointers)
+let r: ref u64 = &value
+let mut_r: mut ref u64 = &mut value
+
+// Owned references
+let o: owned String = String::new()
+
+// Reference-counted
+let rc: rc SharedData = rc_new(data)
+
+// Optionals
+let opt: u64? = some(42)
+let none_val: u64? = none
 ```
 
-Constants are compile-time evaluated and inlined at every use site. No memory is allocated for them.
+### 4.3 Type Aliases
 
-### 4.4 Shadowing
+```aether
+type Result = u64
+type ErrorCode = i32
+type Callback = func(u64): bool
+```
 
-Variable shadowing is allowed:
+### 4.4 Structs
+
+```aether
+struct Point {
+    x: u64
+    y: u64
+}
+
+let p = Point { x: 10, y: 20 }
+let x = p.x
+```
+
+### 4.5 Enums
+
+```aether
+enum Error {
+    NotFound
+    PermissionDenied
+    InvalidInput(string)
+    IoError(u64, string)
+}
+
+let err = Error::NotFound
+let custom = Error::InvalidInput("bad data")
+```
+
+### 4.6 Classes
+
+```aether
+class Counter {
+    value: u64
+
+    func new(self): Counter {
+        return Counter { value: 0 }
+    }
+
+    func increment(self) {
+        self.value += 1
+    }
+
+    func get(self): u64 {
+        return self.value
+    }
+}
+```
+
+### 4.7 Traits
+
+```aether
+trait Drawable {
+    func draw(self)
+    func area(self): f64
+}
+
+impl Drawable for Circle {
+    func draw(self) {
+        print("Drawing circle")
+    }
+
+    func area(self): f64 {
+        return 3.14159 * self.radius * self.radius
+    }
+}
+```
+
+### 4.8 Optional Types
+
+```aether
+let x: u64? = some(42)
+let y: u64? = none
+
+// Pattern matching with if let
+if let val = x {
+    print("Got: {val}")
+}
+
+// Unwrap with default
+let val = x or 0
+```
+
+---
+
+## 5. Variables and Bindings
+
+### 5.1 Let Bindings
+
+```aether
+let x: u64 = 42          // explicit type
+let y = 42               // type inferred
+let mut z = 10           // mutable
+z = 20                   // ok
+
+const MAX = 100          // compile-time constant
+```
+
+### 5.2 Scope
+
+```aether
+{
+    let inner = 5
+    // inner accessible here
+}
+// inner not accessible here
+```
+
+### 5.3 Shadowing
 
 ```aether
 let x = 10
-print(x)           # 10
-let x = x * 2      # shadows previous x
-print(x)           # 20
+let x = x + 5   // shadows previous x, now 15
 ```
 
 ---
 
-## 5. Functions
+## 6. Functions
 
-### 5.1 Basic Functions
+### 6.1 Function Declaration
 
 ```aether
-func greet() {
-    print("Hello!\n")
-}
-
-# With parameters (name: type)
-func greet_name(name: string) {
-    print("Hello, {name}!\n")
-}
-
-# With return value (: type)
-func add(a: int, b: int): int {
+// Basic function
+func add(a: u64, b: u64): u64 {
     return a + b
 }
 
-# Implicit return (last expression)
-func multiply(a: int, b: int): int {
-    return a * b
-}
-```
+// Expression-bodied function
+func add(a: u64, b: u64): u64 -> a + b
 
-> **Syntax note:** Parameters use `name: type` notation (required). Return types use `: type` after the parameter list (required when a return type is present).
-
-### 5.2 Syntax Summary
-
-```aether
-# Function declaration syntax:
-#   func name(param: type, ...): return_type { body }
-#   func name(param: type, ...): return_type -> expr   (expression body)
-# Parameters use colon syntax: name: type
-# Return type uses colon syntax: : type (after the closing paren)
-```
-
-### 5.3 Expression-Bodied Functions
-
-When a function body is a single expression, you can use the `->` shorthand instead of a block `{ }`. The expression after `->` is evaluated and returned automatically — no `return` keyword needed.
-
-```aether
-# Block body — explicit return
-func add(a: int, b: int): int {
-    return a + b
+// Void return
+func greet(name: string) {
+    print("Hello, {name}")
 }
 
-# Expression body — implicit return via ->
-func add(a: int, b: int): int -> a + b
-
-# Works with any expression
-func square(x: int): int -> x * x
-func negate(x: int): int -> -x
-func is_even(x: int): bool -> x % 2 == 0
-func greet(name: string): string -> "Hello, {name}!"
-func max(a: int, b: int): int -> if a > b { a } else { b }
-```
-
-The `->` reads as **"evaluates to"** — `func add(a: int, b: int): int -> a + b` means "add takes two ints, returns an int, and evaluates to a + b."
-
-Expression-bodied functions compose naturally with other modifiers:
-
-```aether
-pub inline func fast_abs(x: int): int -> if x < 0 { -x } else { x }
-
-# Useful for simple getters/properties on structs
-struct Point {
-    x: int
-    y: int
-    func magnitude(self): float -> sqrt(f32(self.x * self.x + self.y * self.y))
-}
-```
-
-The compiler may inline expression-bodied functions more aggressively since they have no local variables or complex control flow.
-
-### 5.4 Inline Functions
-
-Aether provides three levels of inlining control, from hints to hard directives:
-
-| Syntax | Meaning |
-|--------|---------|
-| `inline func` | Hint — compiler may inline at its discretion |
-| `@force_inline` | Directive — always inline, error if impossible |
-| `@no_inline` | Directive — never inline |
-
-#### 5.4.1 `inline` — Inlining Hint
-
-The `inline` modifier is a suggestion. The compiler inlines when it estimates the result is smaller or faster, but may ignore the hint for large functions, recursive functions, or when optimization is disabled.
-
-```aether
-# Small accessor — good candidate for inlining
-inline func get_x(self: ref Point): int -> self.x
-
-# Hot math function
-inline func clamp(value: int, min: int, max: int): int {
-    if value < min { return min }
-    if value > max { return max }
-    return value
-}
-
-# Expression-bodied functions pair naturally with inline
-pub inline func is_zero(x: int): bool -> x == 0
-```
-
-#### 5.4.2 `@force_inline` — Mandatory Inlining
-
-The `@force_inline` attribute forces the compiler to inline the function at every call site. If inlining is impossible (recursive, too large, function pointer taken), the compiler emits an error.
-
-```aether
-@force_inline
-func dma_copy(src: ptr u64, dst: ptr u64, count: u64) {
-    asm { rep movsq }
-}
-
-@force_inline
-func read_cr0(): u64 {
-    let value: u64
-    asm: (value) { mov [value], cr0 }
-    return value
-}
-```
-
-Use `@force_inline` for:
-- Interrupt handlers and hot paths where call overhead is unacceptable
-- Hardware register access (port I/O, MSR reads/writes)
-- DMA operations and memory barriers
-- Functions that must execute in a specific caller context (e.g., no stack frame)
-
-#### 5.4.3 `@no_inline` — Prevent Inlining
-
-The `@no_inline` attribute prevents the compiler from inlining the function. This is useful for debugging, stack-sensitive code, or when you need a consistent call frame.
-
-```aether
-@no_inline
-func debug_log(msg: string) {
-    serial_puts(msg)
-}
-
-@no_inline
-func stack_depth_check(): u64 {
-    let rsp: u64
-    asm: (rsp) { mov [rsp], rsp }
-    return rsp
-}
-```
-
-Use `@no_inline` for:
-- Debug logging (preserves call stack in crash dumps)
-- Stack depth measurement
-- Functions with large local arrays (avoid stack frame bloat at call sites)
-- Functions whose address is taken and called through a pointer
-
-#### 5.4.4 Inlining and Expression-Bodied Functions
-
-Expression-bodied functions (§5.3) are particularly good inlining candidates since they have no local variables, no complex control flow, and no hidden side effects:
-
-```aether
-# These are almost always inlined
-inline func add(a: int, b: int): int -> a + b
-inline func negate(x: int): int -> -x
-inline func is_positive(x: int): bool -> x > 0
-```
-
-The compiler treats `inline func name(): type -> expr` as a strong hint that the function is a thin wrapper and should be inlined aggressively.
-
-### 5.5 Multiple Return Values
-
-```aether
-func divmod(a: int, b: int): (int, int) {
+// Multiple return values via struct
+func divide(a: u64, b: u64): (u64, u64) {
     return (a / b, a % b)
 }
-
-let (q, r) = divmod(17, 5)
-let result = divmod(17, 5)
 ```
 
-### 5.5 Named Returns
+### 6.2 Function Attributes
 
 ```aether
-func divide(a: int, b: int): (quotient: int, remainder: int) {
-    quotient = a / b
-    remainder = a % b
-    return
+// Inline hint
+inline func fast_path(): u64 { return 42 }
+
+// Force inline
+@force_inline func always_inline(): u64 { return 42 }
+
+// Prevent inlining
+@no_inline func debug_trace() { ... }
+
+// Export for module loader
+@export func module_init() { ... }
+
+// Entry point at specific address
+@entry(0x100000) func kernel_main() { ... }
+```
+
+### 6.3 Default Parameters
+
+```aether
+func create_window(title: string, width: u64 = 800, height: u64 = 600) {
+    // ...
 }
+
+create_window("Hello")                    // uses defaults
+create_window("Wide", 1024, 768)          // explicit
 ```
 
-### 5.5 Default Parameters
+### 6.4 Variadic Functions
 
 ```aether
-func create_buffer(size: int = 4096): [byte] {
-    return heap [byte; size]
-}
-
-let default_buf = create_buffer()      # 4096
-let custom_buf = create_buffer(1024)   # 1024
-```
-
-### 5.6 Varargs
-
-```aether
-func sum(args: ...int): int {
-    let mut total = 0
-    for arg in args {
-        total += arg
+func sum(values: ...u64): u64 {
+    let total = 0
+    for v in values {
+        total += v
     }
     return total
 }
 
-let result = sum(1, 2, 3, 4, 5)  # 15
-```
-
-### 5.7 Recursion
-
-```aether
-func factorial(n: u64): u64 {
-    if n <= 1 { return 1 }
-    return n * factorial(n - 1)
-}
-
-# Tail-recursive version (compiler may optimize to loop)
-func factorial_tr(n: u64, acc: u64 = 1): u64 {
-    if n <= 1 { return acc }
-    return factorial_tr(n - 1, acc * n)
-}
-```
-
-### 5.8 Closures / Lambdas
-
-```aether
-let increment = |x: int| x + 1
-let result = increment(41)  # 42
-
-let add = |a, b| a + b
-
-# Multi-line closures use { }
-let process = |items: [int]| {
-    let mut sum = 0
-    for i in items { sum += i }
-    return sum
-}
-```
-
-### 5.9 Higher-Order Functions
-
-```aether
-func apply<T>(value: T, f: func(T): T): T {
-    return f(value)
-}
-
-let double = |x: int| x * 2
-let result = apply(21, double)  # 42
+let s = sum(1, 2, 3, 4, 5)  // s = 15
 ```
 
 ---
 
-## 6. Control Flow
+## 7. Control Flow
 
-### 6.1 If / Elif / Else
-
-All branches are **expressions** — they can produce values.
+### 7.1 If / Elif / Else
 
 ```aether
-let status = if x > 0 {
-    "positive"
-} elif x < 0 {
-    "negative"
-} else {
-    "zero"
-}
-
-# Statement form (no value needed)
 if x > 0 {
-    print("positive\n")
+    print("positive")
+} elif x < 0 {
+    print("negative")
+} else {
+    print("zero")
 }
+
+// If as expression
+let status = if x > 0 { "positive" } else { "non-positive" }
 ```
 
-### 6.2 While Loops
+### 7.2 While Loops
 
 ```aether
-let mut i = 0
-while i < 10 {
-    print("{i}\n")
-    i += 1
+while condition {
+    do_work()
 }
 
-# Infinite loop (kernel entry point pattern)
+// Infinite loop
 while true {
-    handle_interrupts()
+    process()
 }
 ```
 
-### 6.3 For Loops
+### 7.3 For Loops
 
 ```aether
-# Range loop
+// Range loop
 for i in 0..10 {
-    print(i)   # 0 1 2 3 4 5 6 7 8 9
+    print(i)  // 0 through 9
 }
 
+// Inclusive range
 for i in 0..=10 {
-    print(i)   # 0 1 2 3 4 5 6 7 8 9 10
+    print(i)  // 0 through 10
 }
 
-# Step
-for i in (0..100).step(2) {
-    print(i)   # 0 2 4 6 ...
+// Array iteration
+let arr = [1, 2, 3, 4, 5]
+for val in arr {
+    print(val)
 }
 
-# Over collections
-for item in array {
-    print(item)
-}
-
-# With index
-for i, item in enumerate(array) {
-    print("index {i}: {item}\n")
-}
-
-# Reverse
-for i in (0..10).reverse() {
-    print(i)   # 9 8 7 ... 0
+// With index
+for i, val in arr {
+    print("arr[{i}] = {val}")
 }
 ```
 
-### 6.4 Loop Control
+### 7.4 Break and Continue
 
 ```aether
 for i in 0..100 {
-    if i % 2 == 0 { continue }   # skip evens
-    if i > 50 { break }           # stop at 50
-    print(i)
+    if i == 50 { break }
+    if i % 2 == 0 { continue }
+    print(i)  // odd numbers 1..49
 }
 ```
 
-### 6.5 Match
-
-Match is Aether's primary branching construct for algebraic types. Unlike if/elif chains, match **exhaustively checks all possibilities** at compile time. The compiler can warn when you miss a case.
+### 7.5 Match Statements
 
 ```aether
-# Basic integer matching — each case is checked in order
 match value {
-    case 0 => print("zero")
-    case 1 => print("one")
-    case 2..9 => print("small")
-    case 10..=100 => print("medium")
-    case > 100 => print("large")
-    case _ => print("default")      # wildcard catches everything
+    0 => print("zero")
+    1..10 => print("small")
+    10..100 => print("medium")
+    _ => print("large")
 }
 
-# Match on enum variants (algebraic data types)
-enum Result {
-    Ok(int)
-    Err(string)
-}
-
-match result {
-    case Ok(val) => print("success: {val}")
-    case Err(msg) => print("error: {msg}")
-}
-# Compiler checks: Ok and Err both handled — no wildcard needed
-
-# Match on struct content — destructuring with field patterns
-match point {
-    case Point(0, 0) => print("origin")
-    case Point(x, 0) => print("on x-axis at {x}")
-    case Point(0, y) => print("on y-axis at {y}")
-    case Point(x, y) => print("at ({x}, {y})")
-}
-
-# Guard clauses — additional conditions on a pattern
-match x {
-    case n if n > 0 => "positive"
-    case n if n < 0 => "negative"
-    case _ => "zero"
-}
-
-# Match as an expression — all arms must return the same type
-let description = match x {
-    case 0 => "none"
-    case 1 => "one"
-    case _ => "many"
+// Match on enums
+match error {
+    Error::NotFound => handle_not_found()
+    Error::PermissionDenied => handle_permission()
+    Error::InvalidInput(msg) => print("Invalid: {msg}")
+    _ => print("Unknown error")
 }
 ```
 
-### 6.6 Defer
-
-`defer` schedules code to run when the current scope exits — whether by normal completion, early return, or error. Think of it as a guaranteed cleanup hook, like Python's `contextlib` or Golang's `defer`. Defers execute in last-in-first-out order (stack discipline).
+### 7.6 If Let
 
 ```aether
-# Basic defer — runs when the function returns
-func read_config(): string {
-    let fd = open("/etc/aether.cfg")
-    defer { close(fd) }        # guaranteed to run when scope exits
-    let content = read_all(fd)
-    return content
-    # close(fd) called automatically right here, before the actual return
-}
-
-# Multiple defers run in reverse order (LIFO — stack discipline)
-func transfer_data() {
-    let source = open_source()
-    defer { close_source(source) }    # runs second
-
-    let dest = open_dest()
-    defer { close_dest(dest) }        # runs first (LIFO)
-
-    copy(source, dest)
-    # close_dest called, then close_source
-}
-
-# Defers work in any scope, not just functions
-func process_chunk() {
-    {
-        let buf = allocate(1024)
-        defer { free(buf) }
-        fill(buf)
-    }  # buf freed here
-    print("buffer was already freed")
-}
-
-# Defers with class instances are automatic — see §11.3
-```
-
----
-
-## 7. Memory Model
-
-### 7.1 Stack Allocation (Default)
-
-All local variables live on the stack by default. The compiler tracks lifetimes and inserts destructor calls at scope exit.
-
-```aether
-func process() {
-    let p = Point(3, 4)      # struct lives on stack
-    let arr = [1, 2, 3]      # array on stack
-    # compiler generates any necessary destructor calls
-    # when scope exits
-}
-```
-
-### 7.2 Escape Analysis
-
-When a reference to a stack variable could outlive the stack frame, the compiler **automatically promotes** the allocation to the heap.
-
-```aether
-func make_pair(a: int, b: int): ref Pair {
-    let p = Pair(a, b)
-    # Compiler detects: p's reference escapes this function
-    # Auto-promotes to heap allocation
-    return p
-}
-```
-
-The compiler analyzes:
-- Return references
-- Assignment to outer-scope variables
-- Storage in longer-lived data structures
-- Closure captures
-
-### 7.3 Explicit Heap Allocation
-
-```aether
-let big = heap Buffer(1024 * 1024)      # explicit heap allocation
-let shared = heap rc SharedState()       # heap + ref-counted
-```
-
-### 7.4 Region-Based Allocation
-
-Regions group allocations into arenas that are freed as a batch:
-
-```aether
-region("network") {
-    let pkt = Packet(header, payload)   # allocated from region
-    let buf = Buffer(2048)
-    process(pkt)
-}  # all region allocations freed at once — O(1) teardown
-```
-
-Regions compile to:
-1. Arena allocator setup at region entry
-2. Normal allocation within the region
-3. Arena teardown (batch free) at region exit
-
-This is ideal for OS kernel code — interrupt handlers, packet processing, syscall handlers — where you want O(1) cleanup regardless of allocation complexity.
-
-### 7.5 `pool` — Declarative Object Pools
-
-```aether
-# Declare a pool of fixed-size objects
-pool UsbDescriptor of size 64, count 128, alignment 16
-
-# Using the pool
-func alloc_descriptor(): ref UsbDescriptor {
-    return UsbDescriptor()  # allocated from pool
-}  # returned to pool on drop
-
-# Pool statistics at runtime
-print("Free: {UsbDescriptor.free_count()}")
-print("Used: {UsbDescriptor.used_count()}")
-```
-
-The compiler generates:
-- A fixed-size array of `count` × `size` bytes in BSS
-- A free-list or bitmap allocator
-- O(1) allocation and deallocation
-- No fragmentation
-- Deterministic runtime
-
-### 7.6 The `drop` / Destructor Protocol
-
-Any type can define a destructor:
-
-```aether
-struct Buffer {
-    data ptr u8
-    size u64
-    
-    func drop(self ref Buffer) {
-        # compiler guarantees this is called automatically
-        free(self.data)
-    }
-}
-```
-
-The compiler inserts `drop` calls:
-- At every scope exit (normal, early return, exception unwind)
-- In the reverse order of construction
-- For fields within structs/classes (field destruction order = reverse declaration order)
-- For elements in arrays
-
----
-
-## 8. Reference System
-
-### 8.1 Overview
-
-| Reference Kind | Syntax | Ownership | Cost |
-|---------------|--------|-----------|------|
-| Borrowed ref | `ref T` | None | Zero (just a pointer at runtime) |
-| Unique owner | `owned T` | Single | Move semantics; free on drop |
-| Shared count | `rc T` | Multiple | Atomic ref-count increment/decrement |
-| Raw pointer | `ptr T` | None (unsafe) | Zero (requires `unsafe` block) |
-
-### 8.2 Borrowed References (`ref`)
-
-```aether
-func read_data(buf: ref Buffer) {
-    print(buf.size())  # borrowing, not owning
-}  # nothing freed — borrow expires
-
-let buf = Buffer(256)
-read_data(ref buf)     # explicit borrow
-read_data(buf)         # auto-borrowed (inferred)
-```
-
-### 8.3 Move Semantics (`owned`)
-
-```aether
-func take_ownership(buf: owned Buffer) {
-    process(buf)
-}  # buf freed here
-
-let buf = Buffer(256)
-take_ownership(buf)    # moved — 'buf' is no longer valid here
-# buf.read()          # ERROR: use-after-move
-```
-
-### 8.4 Shared Ownership (`rc`)
-
-```aether
-let shared = heap rc Data()
-let copy = shared.clone()
-process(shared)        # ref count = 2
-process(copy)          # ref count = 2 (same allocation)
-# ref count drops to 1, then 0, Data freed
-```
-
-### 8.5 Raw Pointers (`ptr`, unsafe)
-
-```aether
-func dma_transfer(addr: ptr u64, value: u64) {
-    unsafe {
-        *addr = value
-    }
-}
-
-# Casting
-let addr: ptr u64 = unsafe { as_ptr(&buffer) }
-```
-
----
-
-## 9. Structs
-
-### 9.1 Struct Definition
-
-```aether
-struct Point {
-    x int
-    y int
-}
-
-struct Person {
-    name string
-    age int
-    active bool
-}
-```
-
-### 9.2 Struct Construction
-
-```aether
-let p = Point(3, 4)               # positional
-let p2 = Point { x: 3, y: 4 }     # named fields
-let p3 = Point(y: 4)              # defaults: x = 0
-let p4 = Point { .x }             # shorthand: use local variable x
-
-# Struct update syntax (copy with changes)
-let origin = Point(0, 0)
-let moved = Point { .x = 5; ..origin }  # x=5, y=0
-```
-
-### 9.3 Struct Methods
-
-```aether
-struct Point {
-    x int
-    y int
-    
-    func distance(self: ref Point, other: ref Point): float {
-        let dx = self.x - other.x
-        let dy = self.y - other.y
-        return sqrt(f32(dx * dx + dy * dy))
-    }
-    
-    func to_tuple(self: ref Point): (int, int) {
-    return (self.x, self.y)
-}
-    
-    static func origin() Point => Point(0, 0)
-}
-
-let p = Point(3, 4)
-print(p.distance(Point.origin()))
-```
-
-### 9.4 Struct Layout Control
-
-```aether
-# Default: packed (no padding between fields)
-struct SerialPort {
-    @offset(0x00) data byte
-    @offset(0x01) interrupt byte
-    @offset(0x02) fifo_control byte
-    @offset(0x03) line_control byte
-}
-
-# C-compatible layout (with padding)
-@repr(C)
-struct ElfHeader {
-    magic [byte; 4]
-    class byte
-    data byte
-    version byte
-    osabi byte
-    ...
+if let val = optional_value {
+    print("Got: {val}")
+} else {
+    print("No value")
 }
 ```
 
 ---
 
-## 10. Enums and Pattern Matching
+## 8. Memory Management
 
-### 10.1 Simple Enums
+Aether uses compile-time memory management with no garbage collector. Memory is managed through a combination of escape analysis, region inference, and deterministic scope-based deallocation.
+
+### 8.1 Stack Allocation (Default)
+
+All local variables are stack-allocated by default:
 
 ```aether
-enum Color {
-    Red
-    Green
-    Blue
-    Rgb(u8, u8, u8)
-}
-
-let c = Color::Red
-match c {
-    case Red => print("red\n")
-    case Green => print("green\n")
-    case Rgb(r, g, b) => print("#{r:02X}{g:02X}{b:02X}\n")
+func example() {
+    let x: u64 = 42       // on stack
+    let p = Point { ... } // on stack
+    // automatically freed when function returns
 }
 ```
 
-### 10.2 Enums with Payloads (Algebraic Data Types)
+### 8.2 Heap Allocation
 
 ```aether
-enum Optional<T?> {
-    Some(T)
-    None
-}
-
-enum Result<T, E> {
-    Ok(T)
-    Err(E)
-}
-
-# Usage
-let r: Result<int, string> = Result::Ok(42)
-match r {
-    case Ok(val) => print("got {val}")
-    case Err(msg) => print("error: {msg}")
+func example() {
+    let data = heap [u64; 1000]  // heap-allocated array
+    // use data...
+    // freed when data goes out of scope
 }
 ```
 
-### 10.3 Recursive Enums
+### 8.3 Defer
+
+`defer` schedules code to run at scope exit, in LIFO order:
 
 ```aether
-enum Tree<T> {
-    Leaf(T)
-    Node(ref Tree<T>, ref Tree<T>)
+func process_file(path: string) {
+    let file = open(path)
+    defer { close(file) }
+
+    let buf = heap [u8; 4096]
+    defer { free(buf) }
+
+    // use file and buf...
+    // defers run in reverse order when function returns
 }
 ```
 
-### 10.4 Pattern Matching Power
+### 8.4 Regions
+
+Regions provide O(1) arena allocation and teardown:
 
 ```aether
-# Range patterns
-match x {
-    case 0..10 => "small"
-    case 10..100 => "medium"
-    case _ => "large"
-}
+region("request") {
+    let request_data = heap [u8; 1024]
+    let response_data = heap [u8; 4096]
 
-# Or patterns
-match x {
-    case 0 | 1 | 2 => "few"
-    case _ => "many"
-}
+    // process request...
 
-# Destructuring nested
-match complex {
-    case Ok(Point(x, y)) if x > 0 => "positive x"
-    case _ => "other"
-}
-
-# Binding
-match data {
-    case [first, ..rest] => print("first: {first}, rest: {rest}")
-    case [] => print("empty")
+    // all region allocations freed at once when block exits
 }
 ```
 
----
+### 8.5 Reference Types
 
-## 11. Classes
+```aether
+// Immutable reference
+let r: ref u64 = &value
 
-### 11.1 Class Definition
+// Mutable reference
+let r: mut ref u64 = &mut value
 
-Classes are like structs with automatic constructor/destructor management, private fields, and inheritance. The key difference from structs: when a class-typed variable goes out of scope, the compiler **automatically calls `drop()`** — you never need to manually free a class instance. The `init()` constructor is called when the variable is declared.
+// Owned reference (moved, not copied)
+let o: owned String = String::new()
+
+// Reference-counted
+let shared: rc Data = rc_new(data)
+let clone = shared  // increments ref count
+// decremented when clone goes out of scope
+```
+
+### 8.6 Escape Analysis
+
+The compiler determines at compile time whether a value can be stack-allocated or needs the heap:
+
+```aether
+func create_point(): ref Point {
+    let p = Point { x: 10, y: 20 }
+    return &p  // compiler promotes p to heap if it escapes
+}
+```
+
+### 8.7 Class Destruction
+
+Classes are automatically destroyed when they go out of scope. The compiler inserts destructor calls:
 
 ```aether
 class File {
-    # Private fields (default)
-    fd int
-    path string
-    
-    # Constructor — called automatically when a File is created
-    func init(self: ref File, path: string) throws {
-        self.fd = sys_open(path)
-        if self.fd < 0 {
-            throw IOError("Could not open {path}")
+    handle: u64
+
+    func new(path: string): File {
+        return File { handle: open(path) }
+    }
+
+    func drop(self) {
+        close(self.handle)
+    }
+}
+
+func read_config() {
+    let f = File::new("/etc/config")
+    // use f...
+    // f.drop() called automatically at scope exit
+}
+```
+
+---
+
+## 9. Object-Oriented Programming
+
+### 9.1 Struct Methods
+
+```aether
+struct Point {
+    x: u64
+    y: u64
+}
+
+func distance(self: Point, other: Point): f64 {
+    let dx = self.x - other.x
+    let dy = self.y - other.y
+    return sqrt(dx*dx + dy*dy)
+}
+
+let p1 = Point { x: 0, y: 0 }
+let p2 = Point { x: 3, y: 4 }
+let d = p1.distance(p2)  // 5.0
+```
+
+### 9.2 Classes
+
+Classes are like structs but with automatic destructor calls:
+
+```aether
+class Buffer {
+    data: *u8
+    size: u64
+
+    func new(capacity: u64): Buffer {
+        return Buffer {
+            data: heap_alloc(capacity),
+            size: capacity
         }
-        self.path = path
     }
-    
-    # Destructor — called automatically when the File goes out of scope
-    func drop(self: ref File) {
-        sys_close(self.fd)
+
+    func drop(self) {
+        heap_free(self.data)
     }
-    
-    # Public method
-    pub func read(self: ref File, buf: ref [u8]) int {
-        return sys_read(self.fd, buf)
-    }
-    
-    pub func write(self: ref File, data: [u8]) int {
-        return sys_write(self.fd, data)
-    }
-    
-    # Property (accessor syntax)
-    pub prop path(self): string {
-    return self.path
-}
-    
-    # Static method
-    pub static func temp() File {
-        return File("/tmp/temp.dat")
+
+    func write(self, data: *u8, len: u64) {
+        memcpy(self.data, data, len)
     }
 }
 ```
 
-### 11.2 Using Classes
+### 9.3 Access Modifiers
 
 ```aether
-func read_config() throws string {
-    let f = File("/etc/aether.cfg")  # calls init()
-    # compiler inserts: if anything throws, call f.drop()
-    let content = f.read_all()
-    # compiler inserts: f.drop() on all exit paths
-    return content
-}
+pub func public_api() { ... }       // accessible everywhere
+private func internal_impl() { ... } // accessible only in current module
+internal func module_only() { ... } // accessible within the same module
 
-func read_config_autoclose() {
-    # Using defer for explicit control
-    let f = File("/etc/aether.cfg")
-    defer { f.drop() }        # explicit: drop when scope exits
-    let content = f.read_all()
+class Encapsulated {
+    pub value: u64       // public field
+    private secret: u64  // private field
 }
 ```
 
-### 11.3 Automatic Destructor Insertion
-
-This is the key feature that separates classes from structs at runtime. When you declare a class-typed variable, the compiler automatically:
+### 9.4 Inheritance
 
 ```aether
-# When you write this:
-class File {
-    fd int
-    path string
-    func init(self, path: string) { ... }
-    func drop(self) { sys_close(self.fd) }
+class Animal {
+    name: string
+
+    func speak(self) {
+        print("...")
+    }
 }
 
-func process_files() throws {
-    let a = File("a.txt")       # init() called here
-    let b = File("b.txt")       # init() called here
-
-    if some_condition {
-        return  # compiler inserts: b.drop(), then a.drop()
+class Dog : Animal {
+    func speak(self) {
+        print("Woof!")
     }
-
-    throw Error()  # compiler inserts: b.drop(), then a.drop()
-
-    # normal exit: compiler inserts: b.drop(), then a.drop()
-    # destructors run in REVERSE declaration order
 }
 ```
 
-The compiler inserts destructor calls at every scope exit path:
-
-1. **Normal scope exit**: End of block or function
-2. **Early return**: Any `return` statement
-3. **Exception**: Any `throw` that unwinds past the scope
-4. **Loop exit**: `break` or `continue` leaving a block containing class instances
-5. **Move**: When ownership transfers, the source is invalidated but not destructed
-6. **Field**: When a struct/class is destructed, all fields are destructed in reverse order
-
-### 11.4 Inheritance
+### 9.5 Traits and Impl
 
 ```aether
-class Base {
-    pub func speak(self): string {
-        return "base"
-    }
-}
-
-class Derived : Base {
-    pub func speak(self): string {
-        return "derived"
-    }
-}
-
-# Virtual dispatch (opt-in)
-virtual class Renderer {
-    pub func draw(self: ref dyn Renderer)
-}
-```
-
----
-
-## 12. Traits
-
-Traits define shared behavior across types. They're similar to Rust traits or Go interfaces — a contract that types can implement. The compiler uses **static dispatch by default** (zero-cost — no vtable lookups) unless you explicitly opt into dynamic dispatch with `dyn`.
-
-### 12.1 Defining Traits
-
-A trait declares method signatures without implementations. The `Self` type refers to whichever type implements the trait.
-
-```aether
-trait Hashable {
-    func hash(self: ref Self): u64
-    func eq(self: ref Self, other: ref Self): bool
-}
-
 trait Serializable {
-    func serialize(self: ref Self): [u8]
-    func deserialize(data: [u8]): throws Self
+    func serialize(self): [u8]
+    func deserialize(data: [u8]): Self
 }
 
-trait Default {
-    func default() Self  # static — no self parameter
-}
-```
-
-### 12.2 Implementing Traits
-
-```aether
-impl Hashable for Point {
-    func hash(self: ref Point): u64 {
-        return u64(self.x) ^ (u64(self.y) << 32)
+impl Serializable for Config {
+    func serialize(self): [u8] {
+        // serialize fields...
     }
-    
-    func eq(self: ref Point, other ref Point): bool {
-        return self.x == other.x and self.y == other.y
+
+    func deserialize(data: [u8]): Config {
+        // deserialize and return...
     }
-}
-```
-
-### 12.3 Static Dispatch (Default)
-
-```aether
-# Static dispatch — compiler knows the concrete type
-func print_hash<T: Hashable>(value: T) {
-    print(value.hash())
-}
-
-# Called with
-print_hash(Point(3, 4))
-# Compiler generates: call directly to Point::hash
-```
-
-### 12.4 Dynamic Dispatch
-
-```aether
-# Dynamic dispatch — vtable
-func print_hash_dyn(value: ref dyn Hashable) {
-    print(value.hash())  # indirect call through vtable
-}
-```
-
-### 12.5 Trait Objects
-
-```aether
-# A collection of different types implementing the same trait
-let items: [dyn Serializable] = [
-    Point(3, 4) as dyn Serializable,
-    User("alice") as dyn Serializable,
-]
-
-for item in items {
-    let data = item.serialize()  # dynamic dispatch
-}
-```
-
-### 12.6 Trait Bounds
-
-```aether
-func sorted<T: Hashable + Eq>(items: [T]): [T] {
-    # T must implement both Hashable and Eq
 }
 ```
 
 ---
 
-## 13. Generics
+## 10. Generics
 
-Generics let you write functions, structs, and classes that work with any type. All generics are **monomorphized** — the compiler generates a separate copy of the code for each concrete type used. This means zero runtime overhead, at the cost of larger binaries.
-
-### 13.1 Generic Functions
-
-Type parameters are declared with angle brackets `T, U` after the function name and before the regular parameter list:
+### 10.1 Generic Functions
 
 ```aether
-# identity works for any type T
 func identity<T>(value: T): T {
     return value
 }
 
-# Usage — type is inferred from the argument:
-let x = identity(42)   # T = int
-let s = identity("hi") # T = string
+func swap<T>(a: mut ref T, b: mut ref T) {
+    let tmp = a
+    a = b
+    b = tmp
+}
 
-# Generic function with multiple type params
-func min<T, U>(a: T, b: U) { ... }
+let x = identity<u64>(42)
+let y = identity<string>("hello")
 ```
 
-### 13.2 Generic Structs and Classes
+### 10.2 Generic Structs
+
+```aether
+struct Pair<T, U> {
+    first: T
+    second: U
+}
+
+let p = Pair<u64, string> { first: 1, second: "one" }
+```
+
+### 10.3 Generic Classes
 
 ```aether
 class Stack<T> {
     data: [T]
-    count: int
-    capacity: int
-    
-    pub func init(self, capacity: int = 16) {
-        self.capacity = capacity
-        self.data = heap [T; capacity]
-    }
-    
-    pub func push(self: ref Stack<T>, item: T) {
-        if self.count >= self.capacity {
-            self.grow()
-        }
-        self.data[self.count] = item
+    count: u64
+
+    func push(self, value: T) {
+        self.data[self.count] = value
         self.count += 1
     }
-    
-    pub func pop(self: ref Stack<T>): T? {
+
+    func pop(self): T? {
         if self.count == 0 { return none }
         self.count -= 1
-        return self.data[self.count]
+        return some(self.data[self.count])
     }
 }
-
-let stack = Stack<int>(16)
-stack.push(42)
-let val = stack.pop()  # Optional::Some(42)
 ```
 
-### 13.3 Monomorphization
-
-All generics are monomorphized — the compiler generates a separate copy of the function/class for each concrete type used. Zero runtime overhead.
+### 10.4 Generic Constraints
 
 ```aether
-# These call two different compiled versions:
-let max_i = max(10, 20)       # max(int, int) — generated
-let max_f = max(3.14, 2.71)   # max(float, float) — generated
-```
-
-### 13.4 Where Clauses
-
-```aether
-func serialize_all<T where T: Serializable>(items [T]): [byte] {
-    let mut result = [byte]()
-    for item in items {
-        result.append(item.serialize())
-    }
-    return result
+trait Comparable {
+    func less(self, other: Self): bool
 }
+
+func max<T: Comparable>(a: T, b: T): T {
+    if a.less(b) { return b }
+    return a
+}
+```
+
+### 10.5 Monomorphization
+
+Generics are monomorphized at compile time — each concrete type gets its own specialized code. This means zero runtime overhead compared to hand-written code.
+
+```aether
+// Both compile to separate, optimized functions
+let a = max<u64>(10, 20)
+let b = max<string>("apple", "banana")
 ```
 
 ---
 
-## 14. Exception Handling
+## 11. Error Handling
 
-### 14.1 Deterministic Exceptions
+Aether uses deterministic exceptions — errors are returned as tagged unions through the standard register convention, with no unwinding tables or personality functions.
 
-Aether's exceptions are deterministic — no unwinding tables, no personality routines. The compiler encodes exceptions as tagged union returns.
+### 11.1 Try / Catch
 
 ```aether
-func divide(a: int, b: int): throws int {
+try {
+    let result = risky_operation()
+    print("Success: {result}")
+} catch IoError(code, msg) {
+    print("IO error {code}: {msg}")
+} catch {
+    print("Unknown error")
+}
+```
+
+### 11.2 Throw
+
+```aether
+func divide(a: u64, b: u64): u64 {
     if b == 0 {
-        throw DivisionByZero()
+        throw Error::DivisionByZero
     }
     return a / b
 }
 ```
 
-The compiler transforms this to something equivalent to:
+### 11.3 Error Types
 
 ```aether
-func __divide(a: int, b: int): (int, Error?) {
-    if b == 0 {
-        return (0, some Error::DivisionByZero)
+enum MathError {
+    DivisionByZero
+    Overflow
+    Underflow
+}
+
+func safe_sqrt(value: f64): f64 {
+    if value < 0 {
+        throw MathError::Underflow
     }
-    return (a / b, none)
+    return sqrt(value)
 }
 ```
 
-### 14.2 Try / Catch
+### 11.4 Zero-Cost Happy Path
+
+When no exception is thrown, the error checking path is never executed. The happy path compiles to straight-line code:
 
 ```aether
-func compute() {
-    try {
-        let result = divide(10, 2)  # 5
-        print(result)
-        
-        let bad = divide(10, 0)     # throws DivisionByZero
-        # print("never reached")    # skipped
-    } catch DivisionByZero {
-        print("Can't divide by zero!\n")
-    } catch e IOError {
-        print("IO error: {e.message()}\n")
-    }
-}
-```
-
-### 14.3 Custom Error Types
-
-```aether
-enum NetworkError {
-    Timeout
-    ConnectionRefused
-    DnsFailure(string)
-    Unknown(u64)
-}
-
-func connect(host string, port u16) throws NetworkError {
-    if port == 0 {
-        throw NetworkError::Timeout
-    }
-}
-
-# Pattern match on errors
-try {
-    let conn = connect("localhost", 8080)
-} catch NetworkError::Timeout {
-    retry()
-} catch NetworkError::ConnectionRefused {
-    print("server down\n")
-} catch e NetworkError::DnsFailure(host) {
-    print("DNS failed for {host}: {e}\n")
-}
-```
-
-### 14.4 Try Expression
-
-```aether
-let result = try? divide(10, 0) or 0  # if throws, use 0
-
-# Propogate errors with postfix ?
-let value = divide(10, 2)?  # if throws, function returns early with the error
+// Happy path: just a function call and return
+// No branch to error handling unless an error actually occurs
+let result = try { divide(10, 2) }
 ```
 
 ---
 
-## 15. NASM Inline Assembly
+## 12. Compile-Time Execution
 
-### 15.1 Basic Inline
+### 12.1 #run Blocks
 
-```aether
-func outb(port: u16, value: byte) {
-    asm {
-        mov dx, port
-        mov al, value
-        out dx, al
-    }
-}
-```
-
-### 15.2 Input/Output Binding
+`#run` blocks execute during compilation, enabling metaprogramming without a separate macro system:
 
 ```aether
-func rdtsc(): u64 {
-    let hi u32
-    let lo u32
-    asm: (hi, lo) {
-        rdtsc
-        mov [hi], edx
-        mov [lo], eax
+const TABLE_SIZE = #run {
+    // This code runs at compile time
+    let size = 256
+    print("Generating table with {size} entries")
+    size
+}
+
+// Generate lookup tables at compile time
+const SINE_TABLE = #run {
+    let table: [f64; 360]
+    for i in 0..360 {
+        table[i] = sin(i * 3.14159 / 180.0)
     }
-    return (u64(hi) << 32) | u64(lo)
+    table
 }
 ```
 
-### 15.3 Full NASM Directives
+### 12.2 Compile-Time Constants
 
 ```aether
-func setup_gdt() {
-    asm {
-        ; Full NASM syntax supported
-        ; Use any directive, pseudo-instruction, or macro
-        
-        gdt_start:
-            dq 0x0000000000000000  ; null descriptor
-        gdt_code:
-            dw 0xFFFF              ; limit low
-            dw 0x0000              ; base low
-            db 0x00                ; base middle
-            db 10011010b           ; access
-            db 11001111b           ; granularity
-            db 0x00                ; base high
-        gdt_data:
-            dw 0xFFFF
-            dw 0x0000
-            db 0x00
-            db 10010010b
-            db 11001111b
-            db 0x00
-        gdt_end:
-        
-        gdt_ptr:
-            dw gdt_end - gdt_start - 1
-            dq gdt_start
-        
-        lgdt [gdt_ptr]
-        mov ax, 0x10
-        mov ds, ax
-        mov es, ax
-        mov ss, ax
-        jmp 0x08:flush_cs
-    flush_cs:
-    }
-}
+const MAX_CONNECTIONS = 1000
+const BUFFER_SIZE = MAX_CONNECTIONS * 64
+const VERSION = "1.0.0"
 ```
 
-### 15.4 Assembly-Only Functions
+### 12.3 Compile-Time Evaluation
+
+Arithmetic on constants is evaluated at compile time:
 
 ```aether
-asm func _start() {
-    ; Kernel entry point
-    mov esp, stack_top
-    extern kernel_main
-    call kernel_main
-    .halt:
-        hlt
-        jmp .halt
-}
-
-asm func _idt_handler() {
-    ; Interrupt handler with error code
-    push rax
-    push rcx
-    push rdx
-    push rdi
-    push rsi
-    push r8
-    push r9
-    push r10
-    push r11
-    
-    mov rdi, cr2
-    extern handle_page_fault
-    call handle_page_fault
-    
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rsi
-    pop rdi
-    pop rdx
-    pop rcx
-    pop rax
-    iretq
-}
+const BASE = 100
+const MULTIPLIER = 2
+const RESULT = BASE * MULTIPLIER  // evaluated at compile time
 ```
 
-### 15.5 Mixing Aether and Assembly
+---
+
+## 13. Contract Programming
+
+### 13.1 Preconditions
 
 ```aether
-func setup_interrupts(): {
-    let idt_ptr IDTDescriptor
-    
-    asm {
-        ; Use variables from Aether scope
-        lidt [idt_ptr]
-        sti
-    }
-    
-    print("Interrupts enabled\n")
-}
-
-func read_cr0(): u64 {
-    let value u64
-    asm: (value) {
-        mov [value], cr0
-    }
-    return value
-}
-
-func write_cr3(value: u64) {
-    asm {
-        mov cr3, value
-    }
+func divide(a: u64, b: u64): u64
+    pre(b != 0, "Cannot divide by zero")
+{
+    return a / b
 }
 ```
 
-### 15.6 Multi-Target Assembly (NASM Translation Layer)
-
-The compiler supports writing assembly in NASM syntax and translating it to the target architecture's native assembly. This means you write NASM once and the compiler emits the correct instructions for x86_64, ARM64, or RISC-V.
-
-#### 15.6.1 Architecture
-
-```
-NASM asm block → NASM Parser → NASM IR → Target Backend → Native Assembly
-                                          ├── x86_64 (passthrough)
-                                          ├── ARM64 (instruction mapping)
-                                          └── RISC-V (instruction mapping)
-```
-
-The NASM IR is an intermediate representation of the assembly: instructions, operands, registers, labels, and directives. Each target backend maps this IR to the target's native assembly syntax.
-
-#### 15.6.2 NASM IR
-
-The NASM IR captures the full semantics of a NASM assembly block:
+### 13.2 Postconditions
 
 ```aether
-# Internal representation (not user-visible):
-# NasmInstruction { mnemonic: string, operands: [NasmOperand], ... }
-# NasmOperand = Register | Immediate | Memory | Label | ...
-```
-
-Instructions are parsed into this IR regardless of target. The backend then decides how to emit each instruction.
-
-#### 15.6.3 x86_64 Backend (Passthrough)
-
-The x86_64 backend emits NASM instructions directly — it's a passthrough. This is the default and matches current behavior.
-
-```aether
-# x86_64: direct NASM emission
-func outb(port: u16, value: byte) {
-    asm {
-        mov dx, port      # → mov dx, [rbp-8]
-        mov al, value     # → mov al, [rbp-12]
-        out dx, al        # → out dx, al
-    }
+func factorial(n: u64): u64
+    pre(n <= 20, "n too large")
+    post(result > 0, "Result must be positive")
+{
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
 }
 ```
 
-#### 15.6.4 ARM64 Backend
+### 13.3 Debug vs Release
 
-The ARM64 backend translates NASM instructions to ARM64 equivalents:
-
-| NASM (x86_64) | ARM64 Translation |
-|---------------|-------------------|
-| `mov rax, rbx` | `MOV X0, X1` |
-| `add rax, 42` | `ADD X0, X0, #42` |
-| `sub rsp, 16` | `SUB SP, SP, #16` |
-| `push rax` | `STR X0, [SP, #-16]!` |
-| `pop rax` | `LDR X0, [SP], #16` |
-| `call func` | `BL func` |
-| `jmp label` | `B label` |
-| `je label` | `B.EQ label` |
-| `cmp rax, 0` | `CMP X0, #0` |
-| `ret` | `RET` |
-| `mov [rax], rbx` | `STR X1, [X0]` |
-| `mov rax, [rbx]` | `LDR X0, [X1]` |
-| `lgdt [ptr]` | System register write (GDT via `MSR` equivalents) |
-| `out dx, al` | Memory-mapped I/O via `STR` |
-| `in al, dx` | Memory-mapped I/O via `LDR` |
-
-Register mapping:
-- `rax` → `X0`, `rbx` → `X1`, `rcx` → `X2`, `rdx` → `X3`
-- `rsi` → `X4`, `rdi` → `X5`, `rsp` → `SP`, `rbp` → `X29`
-- `r8`-`r15` → `X6`-`X13`
-- `eax` → `W0`, `ebx` → `W1`, etc. (32-bit views)
-
-#### 15.6.5 RISC-V Backend
-
-The RISC-V backend translates NASM instructions to RISC-V equivalents:
-
-| NASM (x86_64) | RISC-V Translation |
-|---------------|-------------------|
-| `mov rax, rbx` | `MV a0, a1` |
-| `add rax, 42` | `ADDI a0, a0, 42` |
-| `sub rsp, 16` | `ADDI sp, sp, -16` |
-| `push rax` | `ADDI sp, sp, -16; SD a0, 0(sp)` |
-| `pop rax` | `LD a0, 0(sp); ADDI sp, sp, 16` |
-| `call func` | `JAL ra, func` |
-| `jmp label` | `J label` |
-| `je label` | `BEQ t0, t1, label` (requires comparison first) |
-| `cmp rax, 0` | `BEQZ a0, label` |
-| `ret` | `RET` (alias for `JALR zero, ra, 0`) |
-| `mov [rax], rbx` | `SD a1, 0(a0)` |
-| `mov rax, [rbx]` | `LD a0, 0(a1)` |
-
-Register mapping:
-- `rax` → `a0`, `rbx` → `a1`, `rcx` → `a2`, `rdx` → `a3`
-- `rsi` → `a4`, `rdi` → `a5`, `rsp` → `sp`, `rbp` → `s0`
-- `r8`-`r15` → `a6`-`a7`, `s1`-`s6`
-
-#### 15.6.6 Selecting the Target Architecture
-
-The target architecture for assembly translation is selected via the `--target` flag:
-
-```
-aether build --target x86_64-freestanding    # NASM passthrough (default)
-aether build --target aarch64-freestanding   # NASM → ARM64 translation
-aether build --target riscv64-freestanding    # NASM → RISC-V translation
-```
-
-The `aether.toml` manifest also supports architecture selection:
-
-```toml
-[build]
-target = "aarch64-freestanding"
-arch = "arm64"
-```
-
-#### 15.6.7 Architecture-Detection Builtins
-
-The compiler provides built-in functions for conditional compilation based on target architecture:
-
-```aether
-# Compile-time architecture detection
-#run {
-    if arch() == "x86_64" {
-        emit('const CACHE_LINE_SIZE = 64')
-    } elif arch() == "arm64" {
-        emit('const CACHE_LINE_SIZE = 128')
-    } elif arch() == "riscv64" {
-        emit('const CACHE_LINE_SIZE = 64')
-    }
-}
-
-# Runtime architecture detection
-func is_x86_64(): bool {
-    return arch() == "x86_64"
-}
-```
-
-#### 15.6.8 Limitations
-
-- Not all NASM instructions have direct equivalents on ARM64/RISC-V. Some require multi-instruction sequences (e.g., `lgdt`, `out`/`in`, `cpuid`).
-- Pseudo-instructions (`times`, `resb`, `equ`) are expanded or mapped to target equivalents.
-- Directives (`[org 0x7C00]`, `[bits 64]`) are target-specific and may need manual adjustment.
-- The translation layer is a best-effort mapping — for maximum control, use target-specific `asm` blocks with `#if arch()` guards.
-
-### 15.7 Universal Binaries (Multi-Arch Dispatch)
-
-Aether can compile a single source file into a **universal binary** that runs natively on multiple architectures without an interpreter, JIT, or emulation layer. The binary contains multiple architecture-specific code slices and a tiny CPU detection trampoline.
-
-#### 15.7.1 How It Works
-
-```
-┌─────────────────────────────────────┐
-│         Universal Binary             │
-│  ┌───────────────────────────────┐  │
-│  │ CPU Detection Trampoline      │  │  ← ~30 bytes, runs first
-│  │   if x86_64: jmp to .text.x86│  │
-│  │   if ARM64:  jmp to .text.arm│  │
-│  └───────────────────────────────┘  │
-│  ┌───────────────────────────────┐  │
-│  │ .text.x86_64                  │  │  ← compiled from Aether source
-│  │   (NASM → x86_64 machine code)│  │
-│  └───────────────────────────────┘  │
-│  ┌───────────────────────────────┐  │
-│  │ .text.arm64                   │  │  ← same source, ARM64 backend
-│  │   (NASM → ARM64 machine code) │  │
-│  └───────────────────────────────┘  │
-│  ┌───────────────────────────────┐  │
-│  │ .rodata (shared)              │  │  ← deduplicated, shared by both
-│  └───────────────────────────────┘  │
-└─────────────────────────────────────┘
-```
-
-The pipeline:
-
-1. **Compile once** to x86_64 NASM → assemble to x86_64 machine code
-2. **Translate the same NASM** through the ARM64 backend → assemble to ARM64 machine code
-3. **Merge** both code slices into a single ELF with a dispatch trampoline
-4. **Deduplicate** shared .rodata/.data sections
-
-The result is a single file that runs natively on both architectures with **zero runtime overhead** — the CPU detection trampoline runs once at startup, then execution continues in the native code path.
-
-#### 15.7.2 CPU Detection Trampoline
-
-```aether
-# Generated automatically by --target universal
-func _start() {
-    asm {
-        # x86_64 path: CPUID check
-        pushfq
-        pushfq
-        xor dword [rsp], 0x00200000
-        popfq
-        pushfq
-        pop rax
-        xor eax, [rsp]
-        and eax, 0x00200000
-        popfq
-        jnz .arm64_entry
-    .x86_64_entry:
-        jmp _start_x86_64
-    .arm64_entry:
-        jmp _start_arm64
-    }
-}
-```
-
-On ARM64 hardware, the CPUID check fails (the `pushfq`/`popfq` sequence is x86-specific and will trap), so the trampoline falls through to the ARM64 entry. On x86_64 hardware, the check succeeds and jumps to the x86_64 entry.
-
-#### 15.7.3 CLI Usage
+Contracts are checked in debug builds and eliminated in release builds:
 
 ```bash
-# Build a universal binary for x86_64 + ARM64
-aether build --target universal --output kernel.elf
+# Debug build — contracts checked
+aether build --debug
 
-# Build for all three architectures
-aether build --target universal-all --output kernel.elf
+# Release build — contracts eliminated
+aether build --release
 ```
 
-#### 15.7.4 When to Use Universal Binaries
+---
 
-- **Kernel images** that must boot on both x86_64 and ARM64 hardware
-- **Boot sector stage1/stage2** that needs to work across architectures
-- **Distribution binaries** where you don't know the target architecture
-- **Developer tooling** that should work on both Intel and Apple Silicon Macs
+## 14. Closures and Lambdas
 
-The tradeoff is binary size — a universal binary is roughly 2x the size of a single-arch binary (plus the tiny trampoline). For kernel images this is usually acceptable; for boot sectors constrained to 512 bytes, single-arch builds remain the default.
-
-#### 15.7.5 Architecture-Specific Code
-
-When writing code that must behave differently per architecture, use compile-time guards:
+### 14.1 Lambda Syntax
 
 ```aether
-#run {
-    if arch() == "x86_64" {
-        emit('const IO_BASE = 0x3F8')
-    } elif arch() == "arm64" {
-        emit('const IO_BASE = 0x3F000000')
+// Simple lambda
+let double = |x: u64| x * 2
+
+// Lambda with block body
+let process = |x: u64, y: u64| {
+    let sum = x + y
+    sum * 2
+}
+
+// Calling a lambda
+let result = double(21)  // 42
+```
+
+### 14.2 Closures
+
+```aether
+func make_adder(x: u64): func(u64): u64 {
+    return |y| x + y  // captures x
+}
+
+let add5 = make_adder(5)
+let result = add5(10)  // 15
+```
+
+### 14.3 Higher-Order Functions
+
+```aether
+func map<T, U>(arr: [T], f: func(T): U): [U] {
+    let result: [U; arr.len]
+    for i in 0..arr.len {
+        result[i] = f(arr[i])
+    }
+    return result
+}
+
+let numbers = [1, 2, 3, 4, 5]
+let doubled = map(numbers, |x| x * 2)
+```
+
+---
+
+## 15. Properties and Operator Overloading
+
+### 15.1 Properties
+
+```aether
+class Temperature {
+    celsius: f64
+
+    func get fahrenheit(self): f64 {
+        return self.celsius * 9.0 / 5.0 + 32.0
+    }
+
+    func set fahrenheit(self, value: f64) {
+        self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 }
 
-# Or runtime dispatch for small differences
-func cache_line_size(): u64 {
-    if arch() == "x86_64" { return 64 }
-    if arch() == "arm64"  { return 128 }
-    return 64
+let t = Temperature { celsius: 100 }
+print(t.fahrenheit)  // 212.0
+t.fahrenheit = 32
+print(t.celsius)      // 0.0
+```
+
+### 15.2 Operator Overloading
+
+```aether
+struct Vector3 {
+    x: f64
+    y: f64
+    z: f64
+}
+
+func op_add(self: Vector3, other: Vector3): Vector3 {
+    return Vector3 {
+        x: self.x + other.x,
+        y: self.y + other.y,
+        z: self.z + other.z
+    }
+}
+
+func op_mul(self: Vector3, scalar: f64): Vector3 {
+    return Vector3 {
+        x: self.x * scalar,
+        y: self.y * scalar,
+        z: self.z * scalar
+    }
+}
+
+let v1 = Vector3 { x: 1, y: 2, z: 3 }
+let v2 = Vector3 { x: 4, y: 5, z: 6 }
+let v3 = v1 + v2  // calls op_add
+let v4 = v1 * 2.0  // calls op_mul
+```
+
+Overloadable operators:
+
+| Operator | Method Name |
+|----------|-------------|
+| `+` | `op_add` |
+| `-` | `op_sub` |
+| `*` | `op_mul` |
+| `/` | `op_div` |
+| `%` | `op_mod` |
+| `==` | `op_eq` |
+| `!=` | `op_ne` |
+| `<` | `op_lt` |
+| `>` | `op_gt` |
+| `[]` | `op_index` |
+
+---
+
+## 16. Dynamic Dispatch
+
+### 16.1 Dyn Trait
+
+```aether
+trait Drawable {
+    func draw(self)
+}
+
+func render(shapes: [dyn Drawable]) {
+    for shape in shapes {
+        shape.draw()  // dynamic dispatch via vtable
+    }
+}
+```
+
+### 16.2 Vtable Layout
+
+The compiler generates a vtable for each trait implementation. The vtable is a struct of function pointers, and `dyn Trait` is a fat pointer (data pointer + vtable pointer).
+
+---
+
+## 17. Inline Assembly
+
+### 17.1 Basic Inline Assembly
+
+```aether
+func read_cr0(): u64 {
+    asm {
+        mov rax, cr0
+    }
+}
+
+func write_cr0(value: u64) {
+    asm {
+        mov cr0, [rbp + 16]
+    }
+}
+```
+
+### 17.2 Multi-Architecture Assembly
+
+```aether
+func halt() {
+    asm {
+        // x86_64
+        hlt
+    }
+    asm {
+        // ARM64
+        wfi
+    }
+    asm {
+        // RISC-V
+        wfi
+    }
+}
+```
+
+### 17.3 Assembly with Output Bindings
+
+```aether
+func cpuid(): (u64, u64, u64, u64) {
+    asm -> (eax, ebx, ecx, edx) {
+        mov rax, 0
+        cpuid
+    }
 }
 ```
 
 ---
 
-## 16. Aether OS Integration
+## 18. Aether OS Integration
 
-### 16.1 Syscall Functions (`sys func`)
-
-```aether
-# These compile to direct calls through the 0x5000 syscall page
-
-sys func putc(c: byte) at(0) {
-    # offset 0 in syscall table: 0x5000
-}
-
-sys func puts(s: string) at(1) {
-    # offset 1: 0x5008
-}
-
-sys func open(path: string): int at(2)
-sys func read(fd: int, buf: ref [u8]): int at(3)
-sys func write(fd: int, data: [u8]): int at(4)
-sys func getcwd(): int at(5)
-sys func chdir(ino: int) at(6)
-sys func exit() at(7)
-sys func booleval(v: u64): u64 at(8)
-```
-
-The compiler emits:
-```nasm
-mov rdi, <arg1>
-mov rsi, <arg2>
-; etc.
-mov rax, <index * 8>    ; 0, 8, 16, ...
-add rax, 0x5000
-call [rax]               ; indirect call through syscall page
-```
-
-### 16.2 Kernel Modules (`module`)
+### 18.1 Syscall Functions
 
 ```aether
-module serial_driver {
-    # Module initialization — called when .ko is loaded
-    @export
-    func mod_init() int {
-        reg_cmd("serial", cmd_serial)
-        reg_hook(1, boolhook_handler)
-        return 0  # success
-    }
-    
-    # Module cleanup — called when .ko is unloaded
-    @export
-    func mod_fini() {
-        unreg_cmd("serial")
-        unreg_hook(1)
-    }
-    
-    # Internal helper
-    func cmd_serial(args: [string]): int {
-        print("serial: {args}\n")
-        return 0
-    }
-    
-    # Hook handler for quantum boolean override
-    func boolhook_handler(value: u64): u64 {
-        # quantum logic
-        return value
-    }
+// Declare a syscall at position 0 in the syscall table
+sys func write(fd: u64, buf: *u8, count: u64): u64 at(0)
+
+// Declare a syscall at position 1
+sys func read(fd: u64, buf: *u8, count: u64): u64 at(1)
+
+// Use syscalls
+func print_hello() {
+    let msg = "Hello from Aether OS!\n"
+    write(1, &msg, 20)
 }
 ```
 
-The module keyword tells the compiler:
-- Generate ELF with `mod_init` and `mod_fini` as exported symbols
-- Reserve space for the module table entry
-- Generate ELF `.ko` file, not a standalone `.elf`
-
-### 16.3 Binary Entry Points
+### 18.2 Kernel Modules
 
 ```aether
-# /bin/ executable — loaded at 0x2000000
-@entry(0x2000000)
-func main(args: [][]byte): int
-    puts("Hello from Aether binary!\n")
+module my_driver
+
+@export func init(): u64 {
+    // Called when module is loaded
+    print("Driver initialized")
+    return 0
+}
+
+@export func cleanup() {
+    // Called when module is unloaded
+    print("Driver cleaned up")
+}
+```
+
+### 18.3 Entry Points
+
+```aether
+// Kernel entry at 0x100000
+@entry(0x100000)
+func kernel_main() {
+    // Kernel initialization
+}
+
+// Userland binary entry
+@entry(0x200000)
+func main(): u64 {
     return 0
 }
 ```
 
-### 16.4 Boot Stage Layout
+### 18.4 Layout Directives
 
 ```aether
-# Stage 1: 512-byte MBR boot sector
-@layout(start=0x7C00, max=512, file="stage1.bin")
-func stage1_mbr(): {
-    asm { ... boot code ... }
-}
-
-# Stage 2: ATA PIO loader
-@layout(start=0x7E00, file="stage2.bin")
-func stage2_loader(): {
-    asm { ... load kernel from disk ... }
-}
-
-# Kernel: loaded at 0x1000000
-@layout(start=0x1000000, file="kernel.elf")
-func kernel_main(): {
-    init_serial()
-    init_memory()
-    mount_fs()
-    load_modules()
-    shell_loop()
+// Boot sector layout: starts at 0x7C00, max 512 bytes
+@layout(start = 0x7C00, max = 512, file = "boot.bin")
+func boot_main() {
+    // Boot code here
+    // Compiler ensures binary fits in 512 bytes
+    // and places 0xAA55 signature at offset 510
 }
 ```
 
-### 16.5 Memory Layout Verification
-
-```aether
-@kernel_layout
-func verify_layout(): {
-    # Compiler knows the Aether memory map
-    # and verifies no overlap:
-    #   0x1000: page allocator bitmap
-    #   0x4000: module registry (5 pointers)
-    #   0x5000: syscall page (9 pointers)
-    #   0x6000-0x1000: Page tables / GDT
-    #   0x7C00: Stage1 MBR
-    #   0x7E00: Stage2 loader
-    #   0x1000000: kernel base
-    #   0x2000000: binary exec space
-    #   0x2100000: module slots
-    
-    let bitmap = reserved(0x1000, 0x1000)      # compiler verifies
-    let registry = reserved(0x4000, 0x1000)
-    let syscall = reserved(0x5000, 0x1000)
-}
-```
-
-### 16.6 ABI Compliance
+### 18.5 Module ABI
 
 ```aether
 @module_abi(version = 1)
-func mod_init() int {
-    # Compiler checks:
-    # - Return type must be int (not void, not u64)
-    # - No parameters beyond what ABI allows
-    # - Must be exported (visible in symbol table)
-    # - Module slot constraints (max 64KB code)
+module network_driver
+
+// ABI version checked by module loader
+// Incompatible versions rejected at load time
+```
+
+### 18.6 Declarative Resources
+
+```aether
+// Memory pool declaration
+pool DMA_BUFFER {
+    size: 4096
+    alignment: 64
+    count: 16
+}
+
+// Protocol declaration
+protocol NetworkDriver {
+    func send(packet: *u8, len: u64): u64
+    func recv(buf: *u8, max_len: u64): u64
 }
 ```
 
 ---
 
-## 17. Compile-Time Execution
+## 19. Multi-Target Assembler
 
-### 17.1 `#run` Blocks
+The multi-target assembler translates NASM syntax assembly between architectures. It parses NASM into an intermediate representation (IR), then emits through pluggable backends.
 
-Code inside `#run { }` executes at compile time:
+### 19.1 Architecture Targets
 
-```aether
-const TABLE_SIZE = 256
+```bash
+# Emit x86_64 NASM (passthrough)
+aether --target asm-x86_64 source.ae -o output.asm
 
-#run {
-    # This runs during compilation, not at runtime
-    let mut values = [int; TABLE_SIZE]
-    for i in 0..TABLE_SIZE {
-        values[i] = compute_sine(i, TABLE_SIZE)
-    }
-    emit_sine_table(values)
-}
+# Translate to ARM64
+aether --target asm-arm64 source.ae -o output_arm64.asm
 
-# The generated table is embedded in the binary
-const SINE_TABLE = #include_sine_table
+# Translate to RISC-V
+aether --target asm-riscv64 source.ae -o output_riscv.asm
 ```
 
-### 17.2 Compile-Time Constants
+### 19.2 Instruction Translation
 
-```aether
-const MAX_PORTS = 64
-const PORT_MASK = (1 << MAX_PORTS) - 1   # computed at compile time
+The assembler maps instructions between architectures:
 
-func initialize_ports() {
-    # MAX_PORTS is a compile-time constant — no load needed
-    for i in 0..MAX_PORTS {
-        setup_port(i)
-    }
-}
+| x86_64 | ARM64 | RISC-V |
+|--------|-------|--------|
+| `mov rax, rbx` | `mov x0, x19` | `mv a0, s1` |
+| `push rax` | `stp x0, [sp, #-16]!` | `addi sp, sp, -8; sd a0, 0(sp)` |
+| `pop rax` | `ldp x0, [sp], #16` | `ld a0, 0(sp); addi sp, sp, 8` |
+| `call func` | `bl func` | `jal ra, func` |
+| `jz label` | `b.eq label` | `beqz a0, label` |
+| `int 0x80` | `svc #0` | `ecall` |
+
+### 19.3 Register Mapping
+
+| x86_64 | ARM64 | RISC-V | Purpose |
+|--------|-------|--------|---------|
+| `rax` | `x0` | `a0` | Return value / arg1 |
+| `rbx` | `x19` | `s1` | Callee-saved |
+| `rcx` | `x1` | `a1` | Arg2 |
+| `rdx` | `x2` | `a2` | Arg3 / error flag |
+| `rsi` | `x3` | `a3` | Arg4 |
+| `rdi` | `x4` | `a4` | Arg5 |
+| `r8` | `x5` | `a5` | Arg6 |
+| `rsp` | `sp` | `sp` | Stack pointer |
+| `rbp` | `x29` | `s0` | Frame pointer |
+
+---
+
+## 20. Universal Binaries
+
+A universal binary contains native code for multiple architectures in a single ELF file. A tiny CPU detection trampoline at the entry point detects the running CPU and dispatches to the correct architecture's code.
+
+### 20.1 Building Universal Binaries
+
+```bash
+# Build for x86_64 + ARM64
+aether --target universal source.ae -o output.ub
+
+# Build for all architectures
+aether --target universal-all source.ae -o output.ub
+
+# Build with explicit arch list
+aether --target universal-x86_64-arm64-riscv64 source.ae -o output.ub
 ```
 
-### 17.3 Compile-Time Reflection
+### 20.2 Binary Layout
 
-```aether
-#run {
-    let fields = reflect(T).fields()
-    for field in fields {
-        print("  {field.name}: {field.type}\n")
-    }
-}
+```
+ELF Header (entry → CPU detection trampoline)
+├── .text.trampoline  — CPUID detection + dispatch
+├── .text.x86_64      — x86_64 native code
+├── .text.arm64       — ARM64 native code
+├── .text.riscv64     — RISC-V native code
+├── .rodata           — Shared read-only data
+├── .data             — Shared writable data
+└── .bss              — Shared zero-initialized data
 ```
 
-### 17.4 Compile-Time Assertions
+### 20.3 CPU Detection
+
+The trampoline uses the EFLAGS.ID bit (bit 21) to detect x86_64 CPUs:
 
 ```aether
-#run {
-    assert(sizeof(int) == 4)
-    assert(sizeof(Pointer) == 8)
-    assert(MAX_PORTS > 0)
-    assert(TABLE_SIZE % 32 == 0)  # must be aligned
+// Pseudocode for the trampoline
+_start:
+    if can_toggle_eflags_id_bit() {
+        jmp _aether_entry  // x86_64
+    } else {
+        jmp _start_arm64   // ARM64
+    }
+```
+
+### 20.4 Architecture-Specific Code
+
+```aether
+// Function only included in x86_64 slice
+@arch(x86_64)
+func setup_gdt() {
+    asm {
+        lgdt [gdt_ptr]
+    }
+}
+
+// Function only included in ARM64 slice
+@arch(arm64)
+func setup_page_tables() {
+    asm {
+        msr ttbr0_el1, x0
+    }
+}
+
+// Function included in all slices (default)
+@arch_shared
+func shared_init() {
+    print("Common initialization")
 }
 ```
 
 ---
 
-## 18. Contract Programming
+## 21. Standard Library
 
-### 18.1 Preconditions and Postconditions
+### 21.1 std.io
 
 ```aether
-func withdraw(account: ref Account, amount: u64): u64
-    pre(account.balance >= amount, "insufficient funds")
-    post(account.balance == old(account.balance) - amount)
-    post(result == amount)
-{
-    account.balance -= amount
-    return amount
+import std.io
+
+print("Hello")           // print string
+println("Hello")         // print with newline
+let s = format("x={x}", x=42)  // format string
+```
+
+### 21.2 std.mem
+
+```aether
+import std.mem
+
+let pool = Pool::new(1024, 64)  // object pool
+let arena = Arena::new(4096)    // arena allocator
+memcpy(dest, src, 100)          // memory copy
+memzero(buf, 256)               // zero memory
+```
+
+### 21.3 std.str
+
+```aether
+import std.str
+
+let s = String::new("hello")
+let t = s.concat(" world")
+let parts = s.split(",")
+```
+
+### 21.4 std.math
+
+```aether
+import std.math
+
+let x = abs(-5)
+let y = min(10, 20)
+let z = max(10, 20)
+```
+
+### 21.5 std.collections
+
+```aether
+import std.collections
+
+let arr = Array::new<u64>()
+arr.push(10)
+arr.push(20)
+let v = arr.pop()
+
+let map = HashMap::new<string, u64>()
+map.insert("key", 42)
+let v = map.get("key")
+```
+
+### 21.6 std.serial
+
+```aether
+import std.serial
+
+serial_write(COM1, "Hello from kernel!\n")
+let c = serial_read(COM1)
+```
+
+### 21.7 std.test
+
+```aether
+import std.test
+
+func test_addition() {
+    assert(add(2, 2) == 4, "2+2 should equal 4")
+    assert(add(-1, 1) == 0, "-1+1 should equal 0")
 }
-```
-
-### 18.2 Invariants
-
-```aether
-class SafeBuffer {
-    data ptr u8
-    size u64
-    position u64
-    
-    # Class invariant — checked at scope entry and exit
-    @invariant(self.position <= self.size)
-    
-    pub func write(self: ref SafeBuffer, data: [byte]) {
-        # Invariant checked: position <= size before
-        self.position += data.len()
-        # Invariant checked: position <= size after
-    }
-}
-```
-
-### 18.3 Contract Behavior
-
-In **debug builds**:
-- Preconditions are checked at runtime
-- Postconditions verify the return value
-- Invariants are checked at every scope boundary
-- Clear error messages: `Contract violation: insufficient funds`
-
-In **release builds**:
-- Contracts are eliminated (zero runtime cost)
-- The compiler uses contracts as optimization hints
-- Postconditions enable the compiler to elide redundant checks
-
----
-
-## 19. Declarative Resources
-
-These features go beyond traditional 4GL scope — they let you **declare what you need** and the compiler generates the implementation.
-
-### 19.1 Protocol Declaration
-
-```aether
-protocol SerialPort {
-    # Protocol-level constants
-    base = 0x3F8     # COM1
-    speed = 115200
-    data_bits = 8
-    stop_bits = 1
-    parity = none
-    
-    # Protocol operations — compiler generates register sequences
-    func init() {
-        asm {
-            mov dx, base + 1     ; interrupt enable
-            mov al, 0x00
-            out dx, al
-            
-            mov dx, base + 3     ; line control
-            mov al, 0x80         ; DLAB enable
-            out dx, al
-            
-            mov dx, base          ; divisor low (115200 → 1)
-            mov al, 1
-            out dx, al
-            
-            mov dx, base + 1     ; divisor high
-            mov al, 0
-            out dx, al
-            
-            mov dx, base + 3
-            mov al, 0x03         ; 8N1
-            out dx, al
-        }
-    }
-    
-    func putc(c: byte) {
-        asm {
-            mov dx, base + 5     ; line status
-        wait:
-            in al, dx
-            test al, 0x20        ; transmitter holding register empty?
-            jz wait
-            
-            mov dx, base
-            mov al, c
-            out dx, al
-        }
-    }
-}
-
-# Usage — compiler resolves to protocol-specific operations
-let com1 = SerialPort()
-com1.putc('A')
-com1.putc(c: 'A')
-```
-
-### 19.2 Query-Style Pipelines
-
-```aether
-# Declarative data processing — compiles to fused loops
-
-let result = data
-    .filter(|x| x > 0)
-    .map(|x| x * 2)
-    .sort()
-    .collect()
-
-# With compile-time knowledge:
-let configs = filesystem
-    .scan("/etc/")
-    .filter(|f| f.extension == "cfg")
-    .map(|f| load_config(f))
-    .collect()
-```
-
-The compiler fuses these operations into a single loop with no intermediate allocations.
-
-### 19.3 Goal-Oriented I/O
-
-```aether
-# Describe *what*, not *how*
-let config = from "/etc/aether.cfg" read Config
-
-# The compiler generates the optimal implementation:
-# - Boot time (no AetherFS): raw ATA PIO read from fixed sectors
-# - Kernel mode (AetherFS loaded): fs_open + fs_read syscalls
-# - Userspace: syscall-page open/read
-
-# Simple resource declaration
-let bitmap = memory(64KB, alignment=4096, type=pageable)
-let dma_buf = memory(256, alignment=16, type=dma)
 ```
 
 ---
 
-## 20. Build System
+## 22. Build System
 
-### 20.1 Semicolons Are Not Required
-
-Aether uses **newlines and indentation** as statement terminators, not semicolons. Semicolons (`;`) are optional and may be used between statements on the same line for readability but are never required.
-
-```aether
-func main() {
-    let x = 42          # newline ends the statement — no semicolon needed
-    let y = 10; let z = 20  # semicolon separates two statements on one line
-    return x + y + z    # no semicolon
-}
-```
-
-Inside braces `{ }`, indentation tokens are ignored — the braces themselves delimit the block. This means you can write:
-
-```aether
-# Braces override indentation — all of these are equivalent:
-func a() {
-    return 1
-}
-
-func b() { return 1 }           # single statement in one line
-
-func c() { let x = 1; let y = 2; return x + y }  # semicolons separate inline stmts
-```
-
-### 20.2 Project Structure
-
-```
-my-project/
-  src/
-    main.ae                # entry point
-    lib/
-      utils.ae             # library modules
-    asm/
-      boot.ae              # assembly-heavy files
-  tests/
-    test_utils.ae          # test files
-  target/
-    debug/
-      kernel.elf
-    release/
-      kernel.elf
-```
-
-### 20.3 `aether.toml`
+### 22.1 aether.toml
 
 ```toml
-[package]
-name = "aether-os-kernel"
+[project]
+name = "my_os"
 version = "0.1.0"
-authors = ["Aether Team"]
 
 [build]
-target = "x86_64-freestanding"
-output = "aether-kernel.elf"
-entry = "src/main.ae"
+target = "kernel"
+debug = true
 
-[build.options]
-optimization = "size"      # size, speed, debug
-linker-script = "tools/kernel.ld"
-strip = true
+[build.targets]
+x86_64 = true
+arm64 = true
+universal = true
 
-[dependencies]
-std = { path = "/lib/aether/std" }
-
-[[stages]]
-file = "stage1.bin"
-layout-start = "0x7C00"
-layout-max = 512
-source = "src/asm/stage1.ae"
-
-[[stages]]
-file = "stage2.bin"
-layout-start = "0x7E00"
-source = "src/asm/stage2.ae"
+[toolchain]
+x86_64_assembler = "nasm"
+arm64_assembler = "aarch64-linux-gnu-as"
+riscv64_assembler = "riscv64-linux-gnu-as"
+linker = "x86_64-elf-ld"
 ```
 
-### 20.4 CLI Commands
+### 22.2 Build Commands
 
-```aether
-aether new my-kernel       # Create new project
-  ├── aether.toml
-  ├── src/
-  │   ├── main.ae
-  │   └── lib/
-  └── tests/
+```bash
+# Build project
+aether build
 
-aether build               # Compile (debug by default)
-aether build --release     # Compile with optimizations
-aether run                 # Build + run in QEMU
-aether test                # Run test suite
-aether fmt                 # Format source code
-aether asm main.ae         # Show generated NASM assembly
-aether inspect kernel.elf  # Inspect ELF binary
-aether clean               # Remove build artifacts
-```
+# Build with specific target
+aether build --target kernel
 
----
+# Build universal binary
+aether build --target universal
 
-## 21. Testing
+# Run tests
+aether test
 
-### 21.1 Test Functions
+# Format source
+aether fmt
 
-```aether
-@Test
-func test_addition() {
-    assert(add(2, 3) == 5)
-    assert(add(-1, 1) == 0)
-}
+# Generate documentation
+aether doc
 
-@Test
-func test_exceptions() {
-    try {
-        let _ = divide(10, 0)
-        assert(false)  # should have thrown
-    } catch DivisionByZero {
-        # expected — test passes
-    }
-}
-```
+# Show generated assembly
+aether asm source.ae
 
-### 21.2 Test Groups
-
-```aether
-test group "memory" {
-    @Test func test_alloc() {
-        let buf = heap Buffer(1024)
-        assert(buf.size() == 1024)
-    }
-    
-    @Test func test_region() {
-        region("test") {
-            let a = allocate()
-            let b = allocate()
-            assert(a != none and b != none)
-        }
-    }
-}
-```
-
-### 21.3 Running Tests
-
-```
-aether test                    # Run all tests
-aether test --filter memory    # Run only memory tests
-aether test --verbose          # Verbose output
-```
-
-Tests compile to standalone ELF binaries that report results through serial output.
-
-### 21.4 Test Infrastructure
-
-```aether
-# Built-in assertion functions
-assert(condition)
-assert_eq(a, b)
-assert_ne(a, b)
-assert_throws(func, ErrorType)
-
-# Test lifecycle
-@Before func setup() { ... }
-@After func teardown() { ... }
-@BeforeClass func init_suite() { ... }
-@AfterClass func cleanup_suite() { ... }
+# Inspect ELF binary
+aether inspect output.elf
 ```
 
 ---
 
-## 22. Standard Library
+## 23. Compiler Targets
 
-### 22.1 `std.io`
-
-```aether
-import std.io as io
-
-std.io.print("Hello, Aether!\n")
-io.println("Hello")  # auto-adds newline
-std.io.format("value: {x}, name: {name}")  # string formatting
-std.io.read_line(buf)    # read a line from serial input
-```
-
-### 22.2 `std.mem`
-
-```aether
-import std.mem as mem
-
-let buf = std.mem.alloc(1024)
-let buf2 = mem.alloc(1024)
-std.mem.copy(dest, src, 512)
-mem.zero(buf)
-mem.free(buf)
-
-# Sized allocators
-let pool = std.mem.Pool(64, 128)       # pool of 128 blocks of 64 bytes
-let arena = mem.Arena(65536)       # arena allocator, 64KB
-```
-
-### 22.3 `std.str`
-
-```aether
-import std.str as str
-
-let s = std.str.String("hello")
-let s2 = str.String("hello")
-let s3 = s.concat(" world")
-let parts = s2.split(" ")
-let trimmed = s2.trim()
-let upper = s2.upper()
-let has_h = s2.contains("h")
-```
-
-### 22.4 `std.collections`
-
-```aether
-import std.collections as collections
-
-let arr = std.collections.Array(int)()
-let arr2 = collections.Array(int)()
-arr.push(1)
-arr.push(2)
-let x = arr.pop()
-
-let map = std.collections.HashMap(string, int)()
-map["key"] = 42
-let val = map["key"] or 0
-
-let set = std.collections.Set(int)()
-set.insert(1)
-assert(set.contains(1))
-```
-
-### 22.5 `std.serial`
-
-```aether
-import std.serial as serial
-
-std.serial.init(115200)
-std.serial.putc('A')
-std.serial.puts("hello\n")
-serial.puts("hello\n")
-let c = std.serial.getc()   # blocking read
-```
-
-### 22.6 `std.elf`
-
-```aether
-import std.elf as elf
-
-let reader = std.elf.Reader(data)
-let entry = reader.entry_point()
-for section in reader.sections() {
-    print("{section.name} at {section.offset}\n")
-}
-```
-
-### 22.7 `std.test`
-
-```aether
-import std.test as test
-
-test.assert(condition)
-test.assert_eq(a, b)
-test.assert_ne(a, b)
-test.benchmark(func, iterations=1000)
-```
-
-### 22.8 `std.math`
-
-```aether
-import std.math as math
-
-let x = std.math.sqrt(144.0)     # 12.0
-let s = std.math.sin(3.14159)    # ~0.0
-let c = std.math.cos(0.0)        # 1.0
-let a = std.math.abs(-42)        # 42
-let m = std.math.min(3, 7)       # 3
-let mx = std.math.max(3, 7)      # 7
-```
+| Target | Description | Output |
+|--------|-------------|--------|
+| `host` | Auto-detect host format | Mach-O 64 or ELF64 |
+| `macho64` | macOS native | Mach-O 64 |
+| `elf64-host` | Linux native | ELF64 |
+| `x86_64-freestanding` | Aether OS ELF64 | ELF64 |
+| `kernel` | Kernel at 0x1000000 | ELF64 |
+| `module` | Aether OS .ko module | ELF64 |
+| `binary` | Userland at 0x2000000 | ELF64 |
+| `boot` | Flat binary boot sector | 512-byte binary |
+| `asm-x86_64` | x86_64 NASM listing | .asm file |
+| `asm-arm64` | ARM64 assembly listing | .asm file |
+| `asm-riscv64` | RISC-V assembly listing | .asm file |
+| `universal` | x86_64 + ARM64 | Multi-arch ELF64 |
+| `universal-all` | All architectures | Multi-arch ELF64 |
 
 ---
 
-## 23. Appendix: Grammar
-
-This is a simplified grammar. The full grammar is defined in the compiler's parser source.
-
-### 23.1 File Structure
+## Appendix A: Compiler Architecture
 
 ```
-file         = { decl }
-decl         = func_decl | class_decl | struct_decl | enum_decl
-             | trait_decl | impl_decl | const_decl | type_alias
-             | module_decl | protocol_decl | pool_decl
-             | import_decl | # run_block
+Source (.ae)
+    │
+    ▼
+┌─────────────┐
+│  Tokenizer   │  → Tokens
+└─────────────┘
+    │
+    ▼
+┌─────────────┐
+│   Parser     │  → AST (50+ node types)
+└─────────────┘
+    │
+    ▼
+┌─────────────┐
+│  Semantic    │  → Type checking, name resolution
+│  Analysis    │  → Escape analysis, region inference
+└─────────────┘
+    │
+    ▼
+┌─────────────┐
+│  Codegen     │  → NASM assembly text
+└─────────────┘
+    │
+    ▼
+┌─────────────┐     ┌──────────────┐
+│  Multi-Arch  │────▶│  x86_64      │
+│  Assembler   │────▶│  ARM64       │
+│  (AsmIR)     │────▶│  RISC-V      │
+└─────────────┘     └──────────────┘
+    │
+    ▼
+┌─────────────┐
+│  Assemble    │  → nasm -f elf64
+│  + Link      │  → x86_64-elf-ld
+└─────────────┘
+    │
+    ▼
+┌─────────────┐
+│  Universal   │  → Multi-arch ELF
+│  Builder     │  → CPU detection trampoline
+└─────────────┘
+    │
+    ▼
+  Output (.elf / .o / .asm / .bin)
 ```
 
-### 23.2 Functions
+## Appendix B: Error Convention
+
+Aether uses a deterministic error convention based on register state:
+
+- **`rdx = 0`**: Success — `rax` holds the return value
+- **`rdx = 1`**: Error — `rax` holds the error discriminant
+
+This convention means:
+- No unwinding tables needed
+- No personality functions
+- Zero-cost happy path (no branches when no error occurs)
+- Deterministic, predictable error handling
+
+## Appendix C: Memory Model
 
 ```
-func_decl    = "func" ident [ generic_params ] param_list [ ret_type ] ( block | "=>" expr )
-param_list   = "(" [ param { "," param } ] ")"
-param        = ident [ "..." ] type_annotation
-ret_type     = type_annotation
-type_annotation = ":" type_expr
+┌─────────────────────────────────────┐
+│              Stack                   │  ← Local variables, function frames
+│  (Automatic, O(1) alloc/free)       │
+├─────────────────────────────────────┤
+│              Heap                    │  ← Explicit `heap` allocations
+│  (Bump allocator, 64KB arenas)      │
+├─────────────────────────────────────┤
+│              Regions                 │  ← `region { }` blocks
+│  (Stack-arena, O(1) teardown)       │
+├─────────────────────────────────────┤
+│              .bss                    │  ← Zero-initialized globals
+│  (Heap start/cur/end, region state) │
+└─────────────────────────────────────┘
 ```
 
-### 23.3 Types
+## Appendix D: Phase Roadmap
 
-```
-type_expr    = primitive | ident | array_type | slice_type
-             | tuple_type | optional_type | ref_type
-             | fn_type | ptr_type
-             | generic_application | where_clause
-
-primitive    = "u8" | "u16" | "u32" | "u64"
-             | "i8" | "i16" | "i32" | "i64"
-             | "f32" | "f64" | "bool" | "byte" | "void"
-             | "string"
-array_type   = "[" type_expr ";" expr "]"
-slice_type   = "[" type_expr "]"
-tuple_type   = "(" type_expr { "," type_expr } ")"
-optional_type = type_expr "?"
-ref_type     = ("ref" | "owned" | "rc") type_expr
-ptr_type     = "ptr" type_expr
-fn_type      = "func" param_list ret_type
-```
-
-### 23.4 Expressions
-
-```
-expr         = literal | ident | unary_op expr
-             | expr binary_op expr
-             | expr "(" args ")"        # function call
-             | expr "." ident           # member access
-             | expr "[" expr "]"        # indexing
-             | expr "[" expr ".." expr "]"  # slice
-             | "if" expr block [ "elif" expr block ] [ "else" block ]
-             | "match" expr "{" match_arms "}"
-             | "try" expr
-             | "throw" expr
-             | block
-             | asm_block
-             | "|" params "|" expr      # lambda
-
-literal      = int_literal | float_literal | string_literal
-             | char_literal | bool_literal | "none"
-```
-
-### 23.5 Statements
-
-```
-stmt         = let_decl | assignment | expr
-             | if_stmt | while_stmt | for_stmt
-             | return_stmt | break_stmt | continue_stmt
-             | defer_stmt | region_block | contract_stmt
-
-let_decl     = "let" ["mut"] ident [type_annotation] "=" expr
-assignment   = lvalue "=" expr
-return_stmt  = "return" [expr]
-```
-
----
-
-*End of Aether Language Specification v0.1*
-
-*"Write what you mean. The compiler handles the rest."*
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 0 | ✅ | Bootstrap toolchain (C compiler, tokenizer, parser, codegen) |
+| 1 | ✅ | Core language (variables, functions, control flow, structs, enums) |
+| 2 | ✅ | Host-native output (Mach-O, ELF64, `aether run`) |
+| 3 | ✅ | Memory management (defer, heap, regions, optionals) |
+| 4 | ✅ | OOP (classes, traits, generics, access modifiers) |
+| 5 | ✅ | Advanced features (exceptions, compile-time, contracts, closures) |
+| 6 | ✅ | Aether OS integration (sys func, modules, attributes, stdlib) |
+| 7 | 🔴 | Self-hosting (compiler compiles itself) |
+| 8 | ✅ | Multi-target assembler (NASM → ARM64/RISC-V) |
+| 9 | 🔴 | Optimization & polish (fmt, doc, LSP, benchmarks) |
+| 10 | ✅ | Universal binary & multi-arch dispatch |
