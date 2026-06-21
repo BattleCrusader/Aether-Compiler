@@ -1003,24 +1003,33 @@ let doubled = map(numbers, |x| x * 2)
 
 ### 15.1 Properties
 
+Properties are methods that look like field access. The compiler infers getter/setter from the signature:
+
+- **Getter**: a method with a return type and no extra parameters beyond `self`
+- **Setter**: a method with no return type and one value parameter
+
 ```aether
 class Temperature {
     celsius: f64
 
-    func get fahrenheit(self): f64 {
+    // Getter: has return type, no extra params
+    func fahrenheit(self): f64 {
         return self.celsius * 9.0 / 5.0 + 32.0
     }
 
-    func set fahrenheit(self, value: f64) {
+    // Setter: no return type, takes a value param
+    func fahrenheit(self, value: f64) {
         self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 }
 
 let t = Temperature { celsius: 100 }
-print(t.fahrenheit)  // 212.0
-t.fahrenheit = 32
+print(t.fahrenheit)  // 212.0 — calls getter
+t.fahrenheit = 32    // calls setter
 print(t.celsius)      // 0.0
 ```
+
+No `get`/`set` keywords needed — the return type tells the compiler everything.
 
 ### 15.2 Operator Overloading
 

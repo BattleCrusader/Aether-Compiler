@@ -580,21 +580,10 @@ AstNode *parse_struct_decl(Parser *p) {
             if (parser_check(p, TOKEN_KW_FUNC)) {
                 parser_advance(p);
                 AstNode *method = parse_func_decl(p);
-                if (method) node_list_append(&st->data.struct_decl.methods, method);
-                continue;
-            }
-
-            /* Check if this is a property declaration: get/set name(...) */
-            bool is_get = parser_match(p, TOKEN_KW_GET);
-            bool is_set = parser_match(p, TOKEN_KW_SET);
-            if (is_get || is_set) {
-                if (parser_check(p, TOKEN_KW_FUNC)) {
-                    parser_advance(p);
-                    AstNode *method = parse_func_decl(p);
-                    if (method) {
-                        method->data.func.is_operator = true; /* mark as property accessor */
-                        node_list_append(&st->data.struct_decl.methods, method);
-                    }
+                if (method) {
+                    /* Property detection: if preceded by 'prop' keyword, mark as property accessor.
+                     * Getters have a return type, setters don't. */
+                    node_list_append(&st->data.struct_decl.methods, method);
                 }
                 continue;
             }

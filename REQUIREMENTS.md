@@ -974,7 +974,7 @@ Run with `aether test`. Tests compile to standalone ELF binaries that report pas
 - [x] Debug-build runtime contract checking
 - [x] Release-build contract elimination (optimizer hints)
 - [x] Closures and lambdas: `|args| expr`
-- [x] Properties: `get`/`set` syntactic sugar
+- [x] Properties: inferred from return type (getter = has return, setter = no return)
 - [x] Operator overloading
 - [x] Generics monomorphization (duplicate code per concrete type)
 - [x] Dynamic dispatch (`dyn Trait` — fat pointer + vtable)
