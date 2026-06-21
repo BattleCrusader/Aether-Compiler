@@ -702,9 +702,26 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_expr(cg, node->data.index.target, slots);
             cg_inst1(cg, "pop", "rcx");   /* rcx = index */
             /* Compute element offset: rax = base, rcx = index, result = base + index * elem_size */
-            /* For simplicity, assume 8-byte elements */
-            cg_inst(cg, "shl rcx, 3");    /* rcx = index * 8 */
-            cg_inst1(cg, "add", "rax, rcx");
+            /* Determine element size from the target type */
+            int elem_size = 8; /* default */
+            if (node->data.index.target->type == NODE_TYPE_ARRAY && node->data.index.target->data.type_node.elem_type) {
+                elem_size = type_size(node->data.index.target->data.type_node.elem_type);
+            } else if (node->data.index.target->type == NODE_TYPE_SLICE && node->data.index.target->data.type_node.elem_type) {
+                elem_size = type_size(node->data.index.target->data.type_node.elem_type);
+            } else if (node->data.index.target->type == NODE_IDENT) {
+                /* Try to infer from the variable's declared type */
+                /* For now, check if the variable has a type annotation */
+                /* We'll look up the let declaration */
+            }
+            /* Scale index by element size */
+            switch (elem_size) {
+                case 1: cg_inst(cg, "add rax, rcx"); break;
+                case 2: cg_inst(cg, "shl rcx, 1"); cg_inst1(cg, "add", "rax, rcx"); break;
+                case 4: cg_inst(cg, "shl rcx, 2"); cg_inst1(cg, "add", "rax, rcx"); break;
+                case 8: cg_inst(cg, "shl rcx, 3"); cg_inst1(cg, "add", "rax, rcx"); break;
+                default:
+                    cg_inst(cg, "shl rcx, 3"); cg_inst1(cg, "add", "rax, rcx"); break;
+            }
             cg_inst(cg, "mov rax, [rax]");
             break;
         }
@@ -803,6 +820,30 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case UNARY_NOT: cg_inst(cg, "test rax, rax"); cg_inst(cg, "sete al"); cg_inst(cg, "movzx rax, al"); break;
                 case UNARY_BIT_NOT: cg_inst1(cg, "not", "rax"); break;
                 case UNARY_DEREF: cg_inst(cg, "mov rax, [rax]"); break;
+                case UNARY_INC:
+                    cg_comment(cg, "increment");
+                    cg_inst(cg, "add rax, 1");
+                    /* Store back to variable if operand is an ident */
+                    if (node->data.unary.operand && node->data.unary.operand->type == NODE_IDENT) {
+                        int off = find_var_offset_by_name(slots,
+                            node->data.unary.operand->data.ident.name.data);
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
+                    break;
+                case UNARY_DEC:
+                    cg_comment(cg, "decrement");
+                    cg_inst(cg, "sub rax, 1");
+                    /* Store back to variable if operand is an ident */
+                    if (node->data.unary.operand && node->data.unary.operand->type == NODE_IDENT) {
+                        int off = find_var_offset_by_name(slots,
+                            node->data.unary.operand->data.ident.name.data);
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
+                    break;
                 case UNARY_HEAP: {
                     /* heap Expr — allocate, store result, return pointer */
                     cg_comment(cg, "heap alloc");
@@ -1490,10 +1531,58 @@ static void cg_func(Codegen *cg, AstNode *func) {
         cg_stmt(cg, func->data.func.body, slots);
     }
 
-    /* Default return — for throws functions, clear error tag */
-    cg_comment(cg, "default return");
-    if (func->data.func.is_throws) {
-        cg_inst(cg, "xor rdx, rdx");  /* clear error tag = success */
+    /* Default return — only if the body didn't already return */
+    /* Check if the last statement is a return */
+    int body_has_return = 0;
+    if (func->data.func.body && func->data.func.body->type == NODE_RETURN) {
+        body_has_return = 1;
+    }
+    /* Also check if body is a block whose last statement is a return or asm block */
+    if (func->data.func.body && func->data.func.body->type == NODE_BLOCK) {
+        AstNodeList *stmts = &func->data.func.body->data.list;
+        if (stmts->count > 0) {
+            AstNode *last = stmts->items[stmts->count - 1];
+            if (last->type == NODE_RETURN) {
+                body_has_return = 1;
+            }
+            /* If the last statement is an asm block, check if it contains ret */
+            if (last->type == NODE_ASM_BLOCK && last->data.asm_block.text) {
+                StringView asm_text = last->data.asm_block.text->data.literal.string_val;
+                const char *p = asm_text.data;
+                const char *end = p + asm_text.len;
+                while (p < end) {
+                    if (p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
+                        (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t' || p[3] == '\r')) {
+                        body_has_return = 1;
+                        break;
+                    }
+                    p++;
+                }
+            }
+        }
+    }
+    /* Also check if body itself is an asm block with ret */
+    if (func->data.func.body && func->data.func.body->type == NODE_ASM_BLOCK) {
+        AstNode *last = func->data.func.body;
+        if (last->data.asm_block.text) {
+            StringView asm_text = last->data.asm_block.text->data.literal.string_val;
+            const char *p = asm_text.data;
+            const char *end = p + asm_text.len;
+            while (p < end) {
+                if (p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
+                    (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t' || p[3] == '\r')) {
+                    body_has_return = 1;
+                    break;
+                }
+                p++;
+            }
+        }
+    }
+    if (!body_has_return) {
+        cg_comment(cg, "default return");
+        if (func->data.func.is_throws) {
+            cg_inst(cg, "xor rdx, rdx");  /* clear error tag = success */
+        }
     }
 
     /* Post-conditions: check before defers (save return value first) */

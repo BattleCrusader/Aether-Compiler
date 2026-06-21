@@ -585,7 +585,18 @@ static AstNode *dce_remove_dead(AstNode *node, SymbolTable *st) {
                     memcpy(name_buf, sv.data, len);
                     name_buf[len] = '\0';
                     int idx = find_symbol(st, name_buf);
-                    if (idx >= 0 && !st->entries[idx].is_used) keep = false;
+                    if (idx >= 0 && !st->entries[idx].is_used) {
+                        /* Check if the initializer has side effects (function calls, asm) */
+                        bool has_side_effects = false;
+                        if (stmt->data.let_decl.value) {
+                            /* Simple check: if the value is a call or asm block, keep it */
+                            if (stmt->data.let_decl.value->type == NODE_CALL ||
+                                stmt->data.let_decl.value->type == NODE_ASM_BLOCK) {
+                                has_side_effects = true;
+                            }
+                        }
+                        if (!has_side_effects) keep = false;
+                    }
                 }
                 if (keep) stmts->items[write_idx++] = dce_remove_dead(stmt, st);
             }

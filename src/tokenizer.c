@@ -194,7 +194,9 @@ const char *token_type_name(TokenType type) {
         case TOKEN_LBRACE: return "{";
         case TOKEN_RBRACE: return "}";
         case TOKEN_PLUS_EQ: return "+=";
+        case TOKEN_PLUS_PLUS: return "++";
         case TOKEN_MINUS_EQ: return "-=";
+        case TOKEN_MINUS_MINUS: return "--";
         case TOKEN_STAR_EQ: return "*=";
         case TOKEN_SLASH_EQ: return "/=";
         case TOKEN_PIPE_LAMBDA: return "|";
@@ -813,8 +815,11 @@ Token tokenizer_next(Tokenizer *t) {
                 case '|': if (next == '|') { t->pos++; t->col++; return make_token(t, TOKEN_PIPE_PIPE); } return make_token(t, TOKEN_PIPE);
                 case '-': if (next == '>') { t->pos++; t->col++; return make_token(t, TOKEN_ARROW); } 
                           if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_MINUS_EQ); } 
+                          if (next == '-') { t->pos++; t->col++; return make_token(t, TOKEN_MINUS_MINUS); } 
                           return make_token(t, TOKEN_MINUS);
-                case '+': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_PLUS_EQ); } return make_token(t, TOKEN_PLUS);
+                case '+': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_PLUS_EQ); } 
+                          if (next == '+') { t->pos++; t->col++; return make_token(t, TOKEN_PLUS_PLUS); } 
+                          return make_token(t, TOKEN_PLUS);
                 case '*': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_STAR_EQ); } return make_token(t, TOKEN_STAR);
                 case '/': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_SLASH_EQ); } return make_token(t, TOKEN_SLASH);
                 case '.': 

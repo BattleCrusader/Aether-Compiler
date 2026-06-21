@@ -927,7 +927,8 @@ AstNode *parse_statement(Parser *p) {
 
         if (parser_match(p, TOKEN_LBRACE)) {
             /* Record the source position right after opening brace */
-            const char *asm_start = p->lexer->tok->pos;
+            /* Use the { token's end position (text.data + text.len) */
+            const char *asm_start = p->previous.text.data + p->previous.text.len;
             const char *asm_end = asm_start;
             int brace_depth = 1;
             /* Track line/col of the opening brace for error reporting */
@@ -1227,8 +1228,8 @@ static AstNode *parse_type_base(Parser *p) {
     /* [T] or [T; N] */
     if (parser_match(p, TOKEN_LBRACKET)) {
         AstNode *elem = parse_type(p);
-        if (parser_match(p, TOKEN_COMMA)) {
-            /* Fixed-size array: [T; N] */
+        if (parser_match(p, TOKEN_COMMA) || parser_match(p, TOKEN_SEMICOLON)) {
+            /* Fixed-size array: [T; N] — accepts both ; and , as separator */
             Token size = p->current; parser_advance(p);
             AstNode *t = node_create(p->arena, NODE_TYPE_ARRAY, p->previous.loc);
             t->data.type_node.elem_type = elem;
@@ -1461,6 +1462,19 @@ static AstNode *parse_prefix(Parser *p) {
             return expr;
         }
 
+        /* Prefix ++ and -- */
+        case TOKEN_PLUS_PLUS:
+        case TOKEN_MINUS_MINUS: {
+            parser_advance(p);
+            UnaryOp op = (token.type == TOKEN_PLUS_PLUS) ? UNARY_INC : UNARY_DEC;
+            AstNode *operand = parse_prefix(p);
+            if (!operand) return NULL;
+            AstNode *node = node_create(p->arena, NODE_UNARY_OP, loc);
+            node->data.unary.op = op;
+            node->data.unary.operand = operand;
+            return node;
+        }
+
         case TOKEN_LBRACKET: {
             parser_advance(p);
             /* Array literal: [1, 2, 3] */
@@ -1656,6 +1670,15 @@ AstNode *parse_expr_prec(Parser *p, Precedence min_prec) {
     /* Parse prefix */
     AstNode *left = parse_prefix(p);
     if (!left) return NULL;
+
+    /* Parse postfix operators (++, --) */
+    while (parser_check(p, TOKEN_PLUS_PLUS) || parser_check(p, TOKEN_MINUS_MINUS)) {
+        UnaryOp op = parser_match(p, TOKEN_PLUS_PLUS) ? UNARY_INC : UNARY_DEC;
+        AstNode *postfix = node_create(p->arena, NODE_UNARY_OP, p->previous.loc);
+        postfix->data.unary.op = op;
+        postfix->data.unary.operand = left;
+        left = postfix;
+    }
 
     /* Parse infix operators while they have sufficient precedence */
     while (true) {

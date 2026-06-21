@@ -108,6 +108,7 @@ typedef enum {
     BIN_ASSIGN, BIN_ADD_ASSIGN, BIN_SUB_ASSIGN,
     BIN_MUL_ASSIGN, BIN_DIV_ASSIGN,
     BIN_RANGE, BIN_RANGE_INCLUSIVE,
+    BIN_CONCAT,  /* string concatenation */
 } BinOp;
 
 /* ================================================================
@@ -118,6 +119,7 @@ typedef enum {
     UNARY_NEG, UNARY_NOT, UNARY_BIT_NOT,
     UNARY_REF, UNARY_DEREF, UNARY_ADDR,
     UNARY_OWNED, UNARY_MUT, UNARY_HEAP,
+    UNARY_INC, UNARY_DEC,
 } UnaryOp;
 
 /* ================================================================
