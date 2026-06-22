@@ -16,9 +16,7 @@ typedef enum {
     TOKEN_ERROR,
     TOKEN_INVALID,
 
-    /* Indentation */
-    TOKEN_INDENT,
-    TOKEN_DEDENT,
+    /* Newlines (statement separators) */
     TOKEN_NEWLINE,
 
     /* Literals */
@@ -192,16 +190,6 @@ typedef struct Tokenizer {
     
     int line;               /* current line number (1-based) */
     int col;                /* current column (1-based) */
-    
-    /* Indentation stack */
-    int *indent_stack;      /* stack of indent widths (in spaces) */
-    int indent_depth;       /* current depth in stack */
-    int indent_cap;         /* capacity of stack */
-    
-    /* Pending tokens (for indent/dedent queue) */
-    Token *pending;         /* pending token buffer */
-    int pending_count;
-    int pending_cap;
     
     /* Error tracking */
     bool had_error;

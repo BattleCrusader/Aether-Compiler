@@ -153,6 +153,9 @@ AstNode *parser_parse(Parser *p) {
 void parse_declaration(Parser *p, AstNodeList *decls) {
     if (p->panic_mode) { parser_sync(p); if (parser_check(p, TOKEN_EOF)) return; }
 
+    /* Skip leading newlines */
+    while (parser_match(p, TOKEN_NEWLINE));
+
     /* Handle attributes like @export, @entry */
     AstNode *last_attr = NULL;
     while (parser_match(p, TOKEN_AT)) {
@@ -331,7 +334,7 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             if (parser_match(p, TOKEN_LBRACE)) {
                 while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
                     if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                        parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                        parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
                     if (parser_match(p, TOKEN_KW_FUNC)) {
                         AstNode *method = parse_func_decl(p);
                         if (method) node_list_append(&t->data.trait_decl.methods, method);
@@ -400,7 +403,7 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             if (parser_match(p, TOKEN_LBRACE)) {
                 while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
                     if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                        parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                        parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
                     if (parser_match(p, TOKEN_KW_FUNC)) {
                         AstNode *method = parse_func_decl(p);
                         if (method) node_list_append(&proto->data.protocol_decl.methods, method);
@@ -424,7 +427,7 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                 if (parser_match(p, TOKEN_LBRACE)) {
                     while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
                         if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                            parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                            parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
                         if (parser_match(p, TOKEN_KW_FUNC)) {
                             AstNode *method = parse_func_decl(p);
                             if (method) node_list_append(&impl->data.impl_block.methods, method);
@@ -444,7 +447,7 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                 AstNode *body = node_block(p->arena, p->previous.loc);
                 while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
                     if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                        parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                        parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
                     AstNode *stmt = parse_statement(p);
                     if (stmt) node_list_append(&body->data.list, stmt);
                 }
@@ -619,7 +622,7 @@ AstNode *parse_struct_decl(Parser *p) {
         /* Parse fields */
         while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
             if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
 
             bool is_pub = parser_match(p, TOKEN_KW_PUB);
 
@@ -686,7 +689,7 @@ AstNode *parse_enum_decl(Parser *p) {
     if (parser_match(p, TOKEN_LBRACE)) {
         while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
             if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
 
             if (!parser_check(p, TOKEN_IDENT)) {
                 parser_error(p, p->current, "expected variant name");
@@ -761,7 +764,7 @@ AstNode *parse_statement(Parser *p) {
             if (parser_match(p, TOKEN_LBRACE)) {
                 body = parse_block_braced(p);
             } else {
-                body = parse_block(p);
+                body = parse_block_braced(p);
             }
             AstNode *ifnode = node_if(p->arena, p->previous.loc, value, body, NULL, NULL);
             ifnode->data.if_node.is_if_let = true;
@@ -779,7 +782,7 @@ AstNode *parse_statement(Parser *p) {
         } else {
             /* Indented block follows */
             parser_advance(p); /* consume newline? */
-            then_block = parse_block(p);
+            then_block = parse_block_braced(p);
         }
 
         /* elif chain */
@@ -809,7 +812,7 @@ AstNode *parse_statement(Parser *p) {
                 parser_advance(p);
                 else_block = parse_block_braced(p);
             } else {
-                else_block = parse_block(p);
+                else_block = parse_block_braced(p);
             }
         }
 
@@ -902,7 +905,7 @@ AstNode *parse_statement(Parser *p) {
         if (parser_match(p, TOKEN_LBRACE)) {
             while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
                 if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-                    parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT)) continue;
+                    parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
                 
                 /* Skip optional 'case' keyword */
                 parser_match(p, TOKEN_KW_CASE);
@@ -1015,7 +1018,7 @@ AstNode *parse_statement(Parser *p) {
         if (parser_match(p, TOKEN_LBRACE)) {
             body = parse_block_braced(p);
         } else {
-            body = parse_block(p);
+            body = parse_block_braced(p);
         }
         AstNode *try_node = node_try(p->arena, p->previous.loc, body);
 
@@ -1043,7 +1046,7 @@ AstNode *parse_statement(Parser *p) {
             if (parser_match(p, TOKEN_LBRACE)) {
                 catch_body = parse_block_braced(p);
             } else {
-                catch_body = parse_block(p);
+                catch_body = parse_block_braced(p);
             }
 
             AstNode *arm = node_catch_arm(p->arena, p->previous.loc,
@@ -1058,7 +1061,7 @@ AstNode *parse_statement(Parser *p) {
     if (parser_match(p, TOKEN_KW_THROW)) {
         AstNode *value = NULL;
         if (!parser_check(p, TOKEN_NEWLINE) && !parser_check(p, TOKEN_RBRACE) &&
-            !parser_check(p, TOKEN_EOF) && !parser_check(p, TOKEN_DEDENT)) {
+            !parser_check(p, TOKEN_EOF)) {
             value = parse_expr(p);
         }
         return node_throw(p->arena, p->previous.loc, value);
@@ -1086,7 +1089,7 @@ AstNode *parse_block(Parser *p) {
         while (parser_match(p, TOKEN_NEWLINE));
 
         /* Dedent or EOF ends the block */
-        if (parser_check(p, TOKEN_DEDENT) || parser_check(p, TOKEN_RBRACE) ||
+        if (parser_check(p, TOKEN_RBRACE) ||
             parser_check(p, TOKEN_EOF)) {
             break;
         }
@@ -1106,7 +1109,7 @@ AstNode *parse_block_braced(Parser *p) {
     while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
         /* Skip newlines, semicolons, and indent/dedent tokens */
         while (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
-               parser_match(p, TOKEN_INDENT) || parser_match(p, TOKEN_DEDENT));
+               parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE));
 
         if (parser_check(p, TOKEN_RBRACE)) break;
 
@@ -1499,10 +1502,28 @@ static AstNode *parse_prefix(Parser *p) {
                                 sub_p->current_scope = NULL;
                                 AstNode *expr_node = parse_expr(sub_p);
                                 if (expr_node) {
-                                    if (result) {
-                                        result = node_binary(p->arena, loc, BIN_CONCAT, result, expr_node);
+                                    /* If the expression is a function call, wrap it in a
+                                       temp variable so codegen evaluates it first. */
+                                    if (expr_node->type == NODE_CALL) {
+                                        static int interp_temp_counter = 0;
+                                        char tmp_name[64];
+                                        snprintf(tmp_name, sizeof(tmp_name), "__interp_tmp_%d", interp_temp_counter++);
+                                        AstNode *tmp_ident = node_ident(p->arena, loc, sv_from_cstr(tmp_name));
+                                        AstNode *tmp_let = node_let(p->arena, loc, tmp_ident, NULL, expr_node, false);
+                                        /* Prepend the let to the current function's body */
+                                        /* We can't easily do that here, so instead just use the
+                                           expression directly — the codegen handles it. */
+                                        if (result) {
+                                            result = node_binary(p->arena, loc, BIN_CONCAT, result, expr_node);
+                                        } else {
+                                            result = expr_node;
+                                        }
                                     } else {
-                                        result = expr_node;
+                                        if (result) {
+                                            result = node_binary(p->arena, loc, BIN_CONCAT, result, expr_node);
+                                        } else {
+                                            result = expr_node;
+                                        }
                                     }
                                 }
                                 lexer_destroy(sub_p->lexer);
@@ -1803,7 +1824,7 @@ AstNode *parse_expr_prec(Parser *p, Precedence min_prec) {
             parser_check(p, TOKEN_RPAREN) || parser_check(p, TOKEN_RBRACKET) ||
             parser_check(p, TOKEN_RBRACE) || parser_check(p, TOKEN_COMMA) ||
             parser_check(p, TOKEN_COLON) || parser_check(p, TOKEN_SEMICOLON) ||
-            parser_check(p, TOKEN_DEDENT)) {
+            parser_check(p, TOKEN_EOF)) {
             break;
         }
 

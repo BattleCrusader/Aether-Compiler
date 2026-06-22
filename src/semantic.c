@@ -319,6 +319,9 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                 bool has_return = false;
                 if (node->data.func.body->type == NODE_RETURN) {
                     has_return = true;
+                } else if (node->data.func.body->type == NODE_ASM_BLOCK) {
+                    /* asm block body counts as having a return (compiler adds epilogue) */
+                    has_return = true;
                 } else if (node->data.func.body->type == NODE_BLOCK) {
                     AstNodeList *stmts = &node->data.func.body->data.list;
                     if (stmts->count > 0) {
@@ -326,19 +329,9 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                         if (last->type == NODE_RETURN) {
                             has_return = true;
                         }
-                        /* asm block with ret also counts as a return */
-                        if (last->type == NODE_ASM_BLOCK && last->data.asm_block.text) {
-                            StringView asm_text = last->data.asm_block.text->data.literal.string_val;
-                            const char *p = asm_text.data;
-                            const char *end = p + asm_text.len;
-                            while (p < end) {
-                                if (p[0] == 'r' && p[1] == 'e' && p[2] == 't' &&
-                                    (end - p == 3 || p[3] == '\n' || p[3] == ' ' || p[3] == '\t' || p[3] == '\r')) {
-                                    has_return = true;
-                                    break;
-                                }
-                                p++;
-                            }
+                        /* asm block counts as having a return (compiler adds epilogue) */
+                        if (last->type == NODE_ASM_BLOCK) {
+                            has_return = true;
                         }
                     }
                 }

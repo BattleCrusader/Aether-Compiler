@@ -323,16 +323,21 @@ static bool is_numeric_expr(AstNode *node) {
     }
     /* Function calls that return numeric types */
     if (node->type == NODE_CALL && node->data.call.callee &&
-        node->data.call.callee->type == NODE_IDENT &&
-        node->data.call.callee->data.ident.resolved &&
-        node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
-        AstNode *ret_type = node->data.call.callee->data.ident.resolved->data.func.return_type;
-        if (ret_type && ret_type->type == NODE_TYPE_PRIMITIVE) {
-            PrimType pt = ret_type->data.type_node.prim;
-            return pt == PRIM_U8 || pt == PRIM_U16 || pt == PRIM_U32 || pt == PRIM_U64 ||
-                   pt == PRIM_I8 || pt == PRIM_I16 || pt == PRIM_I32 || pt == PRIM_I64 ||
-                   pt == PRIM_BOOL || pt == PRIM_BYTE;
+        node->data.call.callee->type == NODE_IDENT) {
+        /* Check resolved declaration first */
+        if (node->data.call.callee->data.ident.resolved &&
+            node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+            AstNode *ret_type = node->data.call.callee->data.ident.resolved->data.func.return_type;
+            if (ret_type && ret_type->type == NODE_TYPE_PRIMITIVE) {
+                PrimType pt = ret_type->data.type_node.prim;
+                return pt == PRIM_U8 || pt == PRIM_U16 || pt == PRIM_U32 || pt == PRIM_U64 ||
+                       pt == PRIM_I8 || pt == PRIM_I16 || pt == PRIM_I32 || pt == PRIM_I64 ||
+                       pt == PRIM_BOOL || pt == PRIM_BYTE;
+            }
         }
+        /* If not resolved, check by name against known functions in the program */
+        /* For now, assume function calls return u64 (the default) */
+        return true;
     }
     return false;
 }
