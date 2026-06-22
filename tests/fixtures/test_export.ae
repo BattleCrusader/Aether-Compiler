@@ -1,4 +1,5 @@
 # test_export.ae — @export attribute for kernel modules
+# @expected(42)
 @export func mod_init(): int {
     return 0
 }

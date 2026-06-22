@@ -1,7 +1,7 @@
-# test_throw.ae — throw and catch
 # @expected(42)
+# test_trycatch_catch_var.ae — catch with variable binding
 func do_throw(): u64 throws {
-    throw 99
+    throw 42
     return 0
 }
 
@@ -10,8 +10,8 @@ func main(): u64 {
 
     try {
         result = do_throw()
-    } catch Error {
-        result = 42
+    } catch Error(e) {
+        result = e
     }
 
     return result

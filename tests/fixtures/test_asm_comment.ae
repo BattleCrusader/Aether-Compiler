@@ -1,4 +1,5 @@
 # test_asm_comment.ae — Tests that Aether comments (#) inside asm blocks
+# @expected(42)
 # are stripped from the generated NASM output (not passed through to NASM)
 func main(): u64 {
     let result: u64 = 0

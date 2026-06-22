@@ -1,12 +1,15 @@
-# test_trycatch.ae — basic try/catch/throw
 # @expected(42)
+# test_trycatch_finally.ae — try/catch with finally block
 func main(): u64 {
     let mut result: u64 = 0
+    let mut finally_ran: u64 = 0
 
     try {
         result = 42
     } catch Error {
         result = 0
+    } finally {
+        finally_ran = 1
     }
 
     return result

@@ -1,4 +1,5 @@
 # test_monomorph.ae — generics monomorphization
+# @expected(42)
 func identity<T>(value: T): T {
     return value
 }

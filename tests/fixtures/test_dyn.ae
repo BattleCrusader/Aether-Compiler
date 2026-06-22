@@ -1,4 +1,5 @@
 # test_dyn.ae — dynamic dispatch with dyn Trait
+# @expected(42)
 trait Drawable {
     func draw(self)
 }

@@ -1,4 +1,5 @@
 # test_interp_numbers.ae — interpolation with numeric values
+# @expected(42)
 func main(): u64 {
     let count: u64 = 42
     let msg = "count = {count}"

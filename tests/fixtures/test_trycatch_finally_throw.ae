@@ -1,5 +1,5 @@
-# test_throw.ae — throw and catch
 # @expected(42)
+# test_trycatch_finally_throw.ae — throw with finally
 func do_throw(): u64 throws {
     throw 99
     return 0
@@ -12,6 +12,8 @@ func main(): u64 {
         result = do_throw()
     } catch Error {
         result = 42
+    } finally {
+        # finally ran
     }
 
     return result

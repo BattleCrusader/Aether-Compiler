@@ -1,3 +1,4 @@
+# @expected(42)
 @module_abi(version=1)
 module mymod {
 func main(): int {

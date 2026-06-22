@@ -1,4 +1,5 @@
 # test_sysfunc.ae — syscall page function declaration
+# @expected(42)
 sys func putc(c: byte) at(0)
 sys func puts(s: string) at(1)
 

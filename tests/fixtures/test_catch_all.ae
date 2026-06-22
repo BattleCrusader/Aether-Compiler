@@ -1,5 +1,5 @@
-# test_throw.ae — throw and catch
 # @expected(42)
+# test_catch_all.ae — catch-all with _
 func do_throw(): u64 throws {
     throw 99
     return 0
@@ -10,7 +10,7 @@ func main(): u64 {
 
     try {
         result = do_throw()
-    } catch Error {
+    } catch _ {
         result = 42
     }
 
