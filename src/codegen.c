@@ -506,6 +506,19 @@ static void cg_warn(Codegen *cg, AstNode *node, const char *msg) {
         node->loc.line, node->loc.col, msg);
 }
 
+/* Emit a source location entry for the segfault handler.
+ * Emits a table entry: dq $ (current address, linker-resolved), dd line, dd col
+ * Only emits for host targets (has segfault handler). */
+static void cg_source_loc(Codegen *cg, AstNode *node) {
+    if (!node) return;
+    if (cg->target != TARGET_MACHO64 && cg->target != TARGET_ELF64_HOST) return;
+    int line = node->loc.line;
+    int col = node->loc.col;
+    if (line <= 0) return;
+    cg_write_fmt(cg, "  dq $\n");
+    cg_write_fmt(cg, "  dd %d, %d\n", line, col);
+}
+
 /* Emit load from stack slot with correct register width */
 static void cg_load_var(Codegen *cg, int offset, int actual_size) {
     char buf[64];

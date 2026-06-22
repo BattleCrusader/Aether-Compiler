@@ -1,7 +1,8 @@
 /* segfault_helper.c — Hardware fault handling for Aether host targets
  *
  * Uses sigsetjmp/siglongjmp for reliable segfault-to-catch redirection.
- * Stacktrace uses backtrace() + dladdr() on the faulting RIP from ucontext.
+ * Stacktrace uses dladdr() on the faulting RIP from ucontext to report
+ * the function name and offset where the crash occurred.
  */
 #include <signal.h>
 #include <setjmp.h>
@@ -23,7 +24,7 @@ static void segfaultHandler(int sig, siginfo_t *info, void *ucontext) {
     /* Extract faulting RIP from ucontext.
      * Verified offsets on macOS 15.7 x86_64:
      *   ucontext_t.uc_mcontext at offset 48 (0x30) — pointer to mcontext_t
-     *   mcontext_t data layout: x86_exception_state64_t (16 bytes)
+     *   mcontext_t data: x86_exception_state64_t (16 bytes)
      *     then x86_thread_state64_t (168 bytes)
      *   x86_thread_state64_t.__rip at offset 128 (0x80)
      *   So __rip is at mcontext_data + 16 + 128 = mcontext_data + 144
@@ -47,7 +48,7 @@ static void segfaultHandler(int sig, siginfo_t *info, void *ucontext) {
         if (n > 0 && n < 128) write(2, buf, (size_t)n);
     }
 
-    /* Resolve the faulting RIP to a function name */
+    /* Resolve the faulting RIP to a function name via dladdr */
     {
         char buf[512];
         Dl_info dlinfo;
