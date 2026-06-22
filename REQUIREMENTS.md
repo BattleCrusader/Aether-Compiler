@@ -663,11 +663,11 @@ trait Drawable {
 }
 
 impl Drawable for Circle {
-    func draw(self) {
+    func draw() {
         print("Drawing circle")
     }
 
-    func area(self): f64 {
+    func area(): f64 {
         return 3.14159 * self.radius * self.radius
     }
 }
@@ -746,12 +746,12 @@ class Temperature {
     celsius: f64
 
     // Getter — has return type
-    prop fahrenheit(self): f64 {
+    prop fahrenheit(): f64 {
         return self.celsius * 9.0 / 5.0 + 32.0
     }
 
     // Setter — no return type
-    prop fahrenheit(self, value: f64) {
+    prop fahrenheit(value: f64) {
         self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 }
@@ -770,23 +770,23 @@ struct Vector2 {
 }
 
 impl Vector2 {
-    func op_add(self, other: Vector2): Vector2 {
+    func op_add( other: Vector2): Vector2 {
         return Vector2 { x: self.x + other.x, y: self.y + other.y }
     }
 
-    func op_sub(self, other: Vector2): Vector2 {
+    func op_sub( other: Vector2): Vector2 {
         return Vector2 { x: self.x - other.x, y: self.y - other.y }
     }
 
-    func op_mul(self, scalar: f64): Vector2 {
+    func op_mul( scalar: f64): Vector2 {
         return Vector2 { x: self.x * scalar, y: self.y * scalar }
     }
 
-    func op_neg(self): Vector2 {
+    func op_neg(): Vector2 {
         return Vector2 { x: -self.x, y: -self.y }
     }
 
-    func op_eq(self, other: Vector2): bool {
+    func op_eq( other: Vector2): bool {
         return self.x == other.x and self.y == other.y
     }
 }
@@ -829,12 +829,12 @@ class Stack<T> {
     data: [T]
     size: int
 
-    pub func push(self: ref Stack<T>, item: T) {
+    pub func push( item: T) {
         self.data[self.size] = item
         self.size += 1
     }
 
-    pub func pop(self: ref Stack<T>): T? {
+    pub func pop(): T? {
         if self.size == 0 { return none }
         self.size -= 1
         return self.data[self.size]
@@ -846,11 +846,11 @@ class Stack<T> {
 
 ```aether
 trait Comparable<T> {
-    func less_than(self: ref Self, other: ref T): bool
+    func less_than( other: ref T): bool
 }
 
 impl<T> Comparable<T> for u64 {
-    func less_than(self: ref u64, other: ref u64): bool {
+    func less_than( other: ref u64): bool {
         return self < other
     }
 }
@@ -1284,7 +1284,7 @@ class Queue<T> {
 
     inv(self.size <= self.data.len)
 
-    func size(self): u64 {
+    func size(): u64 {
         return (self.tail - self.head) % self.data.len
     }
 }
@@ -1367,12 +1367,12 @@ class Temperature {
     celsius: f64
 
     // Getter — has return type
-    prop fahrenheit(self): f64 {
+    prop fahrenheit(): f64 {
         return self.celsius * 9.0 / 5.0 + 32.0
     }
 
     // Setter — no return type
-    prop fahrenheit(self, value: f64) {
+    prop fahrenheit(value: f64) {
         self.celsius = (value - 32.0) * 5.0 / 9.0
     }
 }
@@ -1391,23 +1391,23 @@ struct Vector2 {
 }
 
 impl Vector2 {
-    func op_add(self, other: Vector2): Vector2 {
+    func op_add( other: Vector2): Vector2 {
         return Vector2 { x: self.x + other.x, y: self.y + other.y }
     }
 
-    func op_sub(self, other: Vector2): Vector2 {
+    func op_sub( other: Vector2): Vector2 {
         return Vector2 { x: self.x - other.x, y: self.y - other.y }
     }
 
-    func op_mul(self, scalar: f64): Vector2 {
+    func op_mul( scalar: f64): Vector2 {
         return Vector2 { x: self.x * scalar, y: self.y * scalar }
     }
 
-    func op_neg(self): Vector2 {
+    func op_neg(): Vector2 {
         return Vector2 { x: -self.x, y: -self.y }
     }
 
-    func op_eq(self, other: Vector2): bool {
+    func op_eq( other: Vector2): bool {
         return self.x == other.x and self.y == other.y
     }
 }
@@ -1423,8 +1423,8 @@ Dynamic dispatch uses fat pointers (vtable pointer + data pointer). Use `dyn Tra
 
 ```aether
 trait Drawable {
-    func draw(self)
-    func area(self): f64
+    func draw()
+    func area(): f64
 }
 
 // Static dispatch (default) — monomorphized, zero-cost
@@ -2024,7 +2024,7 @@ Instead of C++ templates or macros, Aether uses pattern matching on types:
 
 ```aether
 impl<T> trait Hashable {
-    func hash(self: ref T): u64 {
+    func hash(): u64 {
         match T {
             case u64 => self
             case [u8] => hash_bytes(self)
