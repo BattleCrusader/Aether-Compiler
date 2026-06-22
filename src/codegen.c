@@ -2595,7 +2595,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
 
     /* Emit source map table for segfault handler (host targets only) */
     if (!cg->has_layout && cg->src_loc_list) {
-        cg_write(cg, "section .rodata\n");
+        cg_write(cg, "section .rodata align=8\n");
         if (cg->target == TARGET_MACHO64) {
             cg_write(cg, "global _aether_source_map\n");
             cg_write(cg, "_aether_source_map:\n");
