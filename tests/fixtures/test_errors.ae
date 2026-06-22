@@ -1,4 +1,5 @@
 # test_errors.ae — custom error types with enum variants and discriminant matching
+# @expected(42)
 enum MyError {
     NotFound
     PermissionDenied

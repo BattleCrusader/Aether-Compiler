@@ -124,9 +124,6 @@ TEST_FIXTURES = \
 	tests/fixtures/test_import.ae \
 	tests/fixtures/test_asm_comment.ae
 
-# Expected exit codes for each fixture
-TEST_EXPECTED = 42 165 150 200 0 0 30 42 0 0 0 42 42 42 42 42 42 128 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42
-
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
 	tests/fixtures/test_layout.ae
@@ -144,11 +141,14 @@ test-host: aether-cli
 	@echo "=== Host-Native Test Runner ==="
 	@echo ""
 	@total=0; pass=0; \
-	set -- $(TEST_EXPECTED); \
 	for fixture in $(TEST_FIXTURES); do \
 		total=$$((total + 1)); \
-		expected=$$1; shift; \
 		name=$$(basename $$fixture .ae); \
+		expected=$$(grep -o '@expected([0-9]*)' $$fixture | grep -o '[0-9]*'); \
+		if [ -z "$$expected" ]; then \
+			printf "  TEST: %s ... FAIL (no @expected annotation)\n" $$name; \
+			continue; \
+		fi; \
 		printf "  TEST: %s ... " $$name; \
 		./$(BUILD_DIR)/aether --target host $$fixture 2>/dev/null >/dev/null; \
 		if [ $$? -ne 0 ]; then \

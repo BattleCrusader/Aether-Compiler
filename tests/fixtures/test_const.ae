@@ -1,4 +1,5 @@
 # test_const.ae — compile-time constant evaluation
+# @expected(128)
 const TABLE_SIZE = 256
 const HALF_SIZE = TABLE_SIZE / 2
 const MASK = (1 << 8) - 1

@@ -1,4 +1,5 @@
 # test_interp_basic.ae — basic string interpolation with variables
+# @expected(42)
 func main(): u64 {
     let name = "World"
     let msg = "Hello {name}!"

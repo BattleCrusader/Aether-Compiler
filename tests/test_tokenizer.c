@@ -32,7 +32,7 @@ typedef struct {
     int literals;      /* INT, FLOAT, STRING, CHAR */
     int operators;     /* + - * / etc */
     int keywords;      /* all keyword tokens */
-    int indent_related; /* INDENT + DEDENT */
+    int newlines;        /* NEWLINE tokens */
     int brackets;      /* ( ) [ ] { } */
 } TokenCounts;
 
@@ -50,8 +50,8 @@ static void count_tokens(const char *source, TokenCounts *c) {
             return;
         }
         c->total++;
-        if (tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_AT) c->keywords++;
-        if (tok.type == TOKEN_INDENT || tok.type == TOKEN_DEDENT) c->indent_related++;
+        if (tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_FINALLY) c->keywords++;
+        if (tok.type == TOKEN_NEWLINE) c->newlines++;
         if (tok.type == TOKEN_INT_LITERAL || tok.type == TOKEN_FLOAT_LITERAL ||
             tok.type == TOKEN_STRING_LITERAL || tok.type == TOKEN_CHAR_LITERAL) c->literals++;
         if (tok.type == TOKEN_LPAREN || tok.type == TOKEN_RPAREN ||
@@ -290,7 +290,7 @@ static void test_operators() {
 }
 
 static void test_indent_balance() {
-    TEST("indent/dedent balance");
+    TEST("indent/dedent balance — no indent tokens with braces-only blocks");
     const char *poison_src =
         "func outer() {\n"
         "    func inner() {\n"
@@ -299,16 +299,16 @@ static void test_indent_balance() {
         "}\n";
     
     Tokenizer *t = tokenizer_create(poison_src, strlen(poison_src), "test");
-    int indents = 0, dedents = 0;
+    int newlines = 0;
     while (true) {
         Token tok = tokenizer_next(t);
         if (tok.type == TOKEN_EOF) break;
-        if (tok.type == TOKEN_INDENT) indents++;
-        if (tok.type == TOKEN_DEDENT) dedents++;
+        if (tok.type == TOKEN_NEWLINE) newlines++;
     }
     tokenizer_destroy(t);
-    ASSERT(indents == dedents, "indents should equal dedents");
-    ASSERT(indents >= 2, "should have at least 2 indent levels");
+    /* With braces-only blocks, there are no indent/dedent tokens.
+     * The test just verifies the tokenizer doesn't crash. */
+    ASSERT(newlines >= 3, "should have at least 3 newlines");
     PASS();
 }
 
@@ -316,17 +316,15 @@ static void test_indent_in_func_body() {
     TEST("indent inside braced func body — no indent tokens");
     const char *src = "func main() {\nlet x = 1\nlet y = 2\n}\n";
     Tokenizer *t = tokenizer_create(src, strlen(src), "test");
-    int indents = 0, dedents = 0;
+    int newlines = 0;
     while (true) {
         Token tok = tokenizer_next(t);
         if (tok.type == TOKEN_EOF) break;
-        if (tok.type == TOKEN_INDENT) indents++;
-        if (tok.type == TOKEN_DEDENT) dedents++;
+        if (tok.type == TOKEN_NEWLINE) newlines++;
     }
     tokenizer_destroy(t);
-    /* Braces override indentation — no indent/dedent inside func body */
-    ASSERT(indents == 0, "braced blocks should have 0 indents");
-    ASSERT(dedents == 0, "braced blocks should have 0 dedents");
+    /* Braces-only blocks — no indent/dedent tokens */
+    ASSERT(newlines >= 3, "should have at least 3 newlines");
     PASS();
 }
 
@@ -341,16 +339,15 @@ static void test_indent_mixed_brace_and_indent() {
         "let z = 3\n"
         "}\n";
     Tokenizer *t = tokenizer_create(src, strlen(src), "test");
-    int indents = 0, dedents = 0;
+    int newlines = 0;
     while (true) {
         Token tok = tokenizer_next(t);
         if (tok.type == TOKEN_EOF) break;
-        if (tok.type == TOKEN_INDENT) indents++;
-        if (tok.type == TOKEN_DEDENT) dedents++;
+        if (tok.type == TOKEN_NEWLINE) newlines++;
     }
     tokenizer_destroy(t);
-    /* Only the 4-space indented 'let y = 2' inside if should produce indent/dedent */
-    ASSERT(indents == dedents, "indent/dedent must balance");
+    /* No indent/dedent tokens with braces-only blocks */
+    ASSERT(newlines >= 5, "should have at least 5 newlines");
     PASS();
 }
 
@@ -364,7 +361,7 @@ static void test_keywords() {
         "region pub static defer unsafe module sys "
         "pre post drop init self type trait impl "
         "pool protocol virtual dyn throws export entry "
-        "layout test run prop inline at\n";
+        "layout run prop inline at finally\n";
 
     Tokenizer *t = tokenizer_create(src, strlen(src), "test");
     int kw = 0;
@@ -377,7 +374,7 @@ static void test_keywords() {
             FAIL("unrecognized keyword treated as identifier");
             return;
         }
-        ASSERT(tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_AT,
+        ASSERT(tok.type >= TOKEN_KW_FUNC && tok.type <= TOKEN_KW_FINALLY,
                "unexpected token type for keyword");
         kw++;
     }

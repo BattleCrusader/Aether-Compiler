@@ -1,3 +1,4 @@
+# @expected(0)
 struct Point {
     x: int
     y: int

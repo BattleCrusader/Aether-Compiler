@@ -1,4 +1,5 @@
 # test_op_overload.ae — operator overloading
+# @expected(42)
 struct Vector {
     x: int
     y: int

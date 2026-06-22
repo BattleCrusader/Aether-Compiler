@@ -25,7 +25,7 @@ static void dump_tokens(const char *source, const char *name) {
 
 int main() {
     dump_tokens("+ - * / % = == != < > <= >= && || -> .. ..= += -= << >> ?", "operators");
-    dump_tokens("func let mut if elif else while for return true false none asm break continue struct enum class match case try throw catch and or not import const ref owned rc heap region pub static defer unsafe module sys pre post drop init self type trait impl pool protocol virtual dyn throws export entry layout test run", "keywords");
+    dump_tokens("func let mut if elif else while for return true false none asm break continue struct enum class match case try throw catch and or not import const ref owned rc heap region pub static defer unsafe module sys pre post drop init self type trait impl pool protocol virtual dyn throws export entry layout test run prop inline at finally", "keywords");
     dump_tokens("1_000_000\n0xFFFF_FFFF\n0b1010_0101\n", "underscores");
     dump_tokens("'a'\n'\\n'\n'\\x41'\n", "chars");
     dump_tokens("# comment\nfunc main() {\n    return 42\n}\n", "line comment");

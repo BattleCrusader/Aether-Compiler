@@ -1,4 +1,5 @@
 # test_enum.ae — test enum declaration, layout, and construction
+# @expected(0)
 enum Option {
     Some(int)
     None
