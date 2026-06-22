@@ -1592,7 +1592,14 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                             if ((p - s) >= 6 && strncmp(s, "extern", 6) == 0) {
                                 /* skip — already emitted at top */
                             } else {
-                                cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                                /* Strip Aether comments (#) from asm block output */
+                                const char *s_trim = line_start;
+                                while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
+                                if (s_trim < p && *s_trim == '#') {
+                                    /* Skip this line entirely — it's an Aether comment */
+                                } else {
+                                    cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                                }
                             }
                         } else {
                             cg_write(cg, "\n");
@@ -1983,7 +1990,14 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                         const char *line_start = p;
                         while (p < end && *p != '\n') p++;
                         if (p > line_start) {
-                            cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                            /* Strip Aether comments (#) from asm block output */
+                            const char *s_trim = line_start;
+                            while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
+                            if (s_trim < p && *s_trim == '#') {
+                                /* Skip this line entirely — it's an Aether comment */
+                            } else {
+                                cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                            }
                         } else {
                             cg_write(cg, "\n");
                         }
