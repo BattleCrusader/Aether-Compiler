@@ -1,7 +1,5 @@
 # std/elf.ae — ELF64 reader/writer
-# Freestanding standard library
-#
-# Provides structures and functions for parsing and generating ELF64 files.
+# Pure Aether struct definitions.
 
 struct Elf64Header {
     magic: u64

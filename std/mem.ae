@@ -1,35 +1,29 @@
 # std/mem.ae — Memory operations: copy, zero, alloc, free
-# Freestanding standard library
-#
-# SysV ABI: rdi=arg1, rsi=arg2, rdx=arg3, rax=return.
+# Uses asm for pointer operations (Aether cannot express byte-level pointer access natively).
+# Uses Aether's heap keyword for allocation.
 
-# Copy memory from source to destination.
 func memCopy(destination: u64, source: u64, byteCount: u64) {
     asm {
+        mov rdi, rdi
+        mov rsi, rsi
         mov rcx, rdx
         rep movsb
     }
 }
 
-# Zero memory at pointer for byteCount bytes.
 func memZero(pointer: u64, byteCount: u64) {
     asm {
+        mov rdi, rdi
         mov rcx, rsi
         xor al, al
         rep stosb
     }
 }
 
-# Allocate byteCount bytes from the bump allocator.
 func alloc(byteCount: u64): u64 {
-    asm {
-        call __aether_alloc
-    }
+    return heap byteCount
 }
 
-# Free is a no-op with the bump allocator (all memory freed at once).
 func free(pointer: u64) {
-    asm {
-        ; bump allocator: no-op
-    }
+    # bump allocator: no-op
 }

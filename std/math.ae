@@ -1,42 +1,23 @@
-# std/math.ae — Basic math: abs, min, max, clamp
-# Freestanding standard library
-#
-# All functions use SysV ABI: rdi=firstArg, rsi=secondArg, rdx=thirdArg, rax=return.
+# std/math.ae — Basic math: absValue, min, max, clamp
+# Pure Aether — no asm blocks needed for simple arithmetic.
 
-# Absolute value of a signed integer.
 func absValue(value: int): int {
-    asm {
-        mov rax, rdi
-        neg rax
-        cmovl rax, rdi
-    }
+    if value < 0 { return -value }
+    return value
 }
 
-# Minimum of two signed integers.
 func min(firstValue: int, secondValue: int): int {
-    asm {
-        mov rax, rdi
-        cmp rdi, rsi
-        cmovg rax, rsi
-    }
+    if firstValue < secondValue { return firstValue }
+    return secondValue
 }
 
-# Maximum of two signed integers.
 func max(firstValue: int, secondValue: int): int {
-    asm {
-        mov rax, rdi
-        cmp rdi, rsi
-        cmovl rax, rsi
-    }
+    if firstValue > secondValue { return firstValue }
+    return secondValue
 }
 
-# Clamp value between lowerBound and upperBound (inclusive).
 func clamp(value: int, lowerBound: int, upperBound: int): int {
-    asm {
-        mov rax, rdi
-        cmp rdi, rsi
-        cmovl rax, rsi
-        cmp rax, rdx
-        cmovg rax, rdx
-    }
+    if value < lowerBound { return lowerBound }
+    if value > upperBound { return upperBound }
+    return value
 }

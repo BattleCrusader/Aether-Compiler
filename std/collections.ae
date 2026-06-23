@@ -1,5 +1,5 @@
 # std/collections.ae — Simple collections: Array, List
-# Freestanding standard library
+# Pure Aether structs.
 
 struct Array {
     data: u64
@@ -14,15 +14,17 @@ struct List {
 }
 
 func arrayNew(): Array {
-    asm {
-        xor rax, rax
-        xor rdx, rdx
-    }
+    let result: Array
+    result.data = 0
+    result.length = 0
+    result.capacity = 0
+    return result
 }
 
 func listNew(): List {
-    asm {
-        xor rax, rax
-        xor rdx, rdx
-    }
+    let result: List
+    result.data = 0
+    result.length = 0
+    result.capacity = 0
+    return result
 }

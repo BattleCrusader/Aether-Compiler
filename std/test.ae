@@ -1,13 +1,6 @@
-# std/test.ae — Testing: assert, test runner
-# Freestanding standard library for host-native tests
-#
-# A test case is just an assertEquals call:
-#   assertEquals(2 + 3, 5, "2 + 3 should be 5")
-#
-# If the assertion fails, the process exits immediately with code 1
-# (like JUnit throwing an AssertionError). If it passes, execution continues.
+# std/test.ae — Testing: assertEquals, assertTrue
+# JUnit-style assertions using Aether's string interpolation and exit() built-in.
 
-# Assert that a == b. Prints PASS or FAIL. Exits with code 1 on failure.
 func assertEquals(actualValue: u64, expectedValue: u64, message: string) {
     if actualValue != expectedValue {
         print("  FAIL: {message} (got {actualValue}, expected {expectedValue})\n")
@@ -16,7 +9,6 @@ func assertEquals(actualValue: u64, expectedValue: u64, message: string) {
     print("  PASS: {message}\n")
 }
 
-# Assert that condition is true. Prints PASS or FAIL. Exits with code 1 on failure.
 func assertTrue(condition: bool, message: string) {
     if !condition {
         print("  FAIL: {message}\n")

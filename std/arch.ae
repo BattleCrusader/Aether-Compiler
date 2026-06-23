@@ -1,15 +1,10 @@
 # std/arch.ae — Architecture detection and multi-target helpers
-# Freestanding standard library
-#
-# Provides compile-time and runtime architecture detection.
+# archDetect uses asm for CPUID (can't be done in pure Aether).
 
-# Architecture identifiers
 const archX8664 = 0
 const archArm64 = 1
 const archRiscv64 = 2
 
-# Runtime architecture detection via CPUID.
-# Returns archX8664 (0) or archArm64 (1).
 func archDetect(): u64 {
     asm {
         pushfq
@@ -31,10 +26,7 @@ func archDetect(): u64 {
     }
 }
 
-# Cache line size per architecture
 const cacheLineX8664 = 64
 const cacheLineArm64 = 64
 const cacheLineRiscv64 = 64
-
-# Page size (standard 4KB for all architectures)
 const pageSize = 4096

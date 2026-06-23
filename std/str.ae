@@ -1,44 +1,26 @@
 # std/str.ae — String operations: concat, split, trim, toUpper, toLower
-# Freestanding standard library
-#
-# SysV ABI: rdi=arg1, rsi=arg2, rdx=arg3, rax=return.
-# Strings are passed as pointers in rdi/rsi.
+# Uses Aether's + operator for string concatenation.
 
-# Concatenate two strings. Uses __aether_concat runtime helper.
 func concat(firstString: string, secondString: string): string {
-    asm {
-        call __aether_concat
-    }
+    return firstString + secondString
 }
 
-# Split string by delimiter. Returns pointer to slice array.
 func split(inputString: string, delimiter: string): [string] {
-    asm {
-        ; TODO: implement string split
-        xor rax, rax
-    }
+    # TODO: implement string split
+    return []
 }
 
-# Trim leading/trailing whitespace from string.
 func trim(inputString: string): string {
-    asm {
-        ; TODO: implement string trim
-        mov rax, rdi
-    }
+    # TODO: implement string trim
+    return inputString
 }
 
-# Convert string to uppercase.
 func toUpper(inputString: string): string {
-    asm {
-        ; TODO: implement string toUpper
-        mov rax, rdi
-    }
+    # TODO: implement string toUpper
+    return inputString
 }
 
-# Convert string to lowercase.
 func toLower(inputString: string): string {
-    asm {
-        ; TODO: implement string toLower
-        mov rax, rdi
-    }
+    # TODO: implement string toLower
+    return inputString
 }

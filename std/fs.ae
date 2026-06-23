@@ -1,9 +1,5 @@
 # std/fs.ae — AetherFS syscall wrappers
-# Freestanding standard library
-#
-# Provides file system operations that map to AetherFS syscalls.
-# In freestanding mode, these call through the syscall page at 0x5000.
-# In host mode, they use the host OS's native file I/O.
+# Uses Aether's sys keyword for syscall declarations.
 
 sys func fsOpen(path: *u8, flags: u64): u64 at(10)
 sys func fsRead(fileDescriptor: u64, buffer: *u8, count: u64): u64 at(11)

@@ -1,11 +1,6 @@
 # std/io.ae — I/O operations: print, format, write
-# Freestanding standard library
-#
-# print() is a compiler built-in (emits write syscall inline).
-# println() adds a newline after the message.
+# print() is a compiler built-in. println() adds a newline.
 
-# Print a string followed by a newline.
 func println(value: string) {
-    print(value)
-    print("\n")
+    print(value + "\n")
 }
