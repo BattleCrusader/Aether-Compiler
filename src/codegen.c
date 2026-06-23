@@ -25,7 +25,7 @@ static int mkdir_p(const char *path) {
     return mkdir(tmp, 0755);
 }
 
-#define INITIAL_CAP 65536
+#define INITIAL_CAP 262144
 
 /* Forward declarations */
 typedef struct VarSlot VarSlot;
@@ -1225,10 +1225,9 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_LITERAL_CHAR:
-            cg_inst1(cg, "movzx", "eax, byte 0");
             {
                 char buf[32];
-                snprintf(buf, sizeof(buf), "mov rax, %u", (unsigned)node->data.literal.char_val);
+                snprintf(buf, sizeof(buf), "mov eax, %u", (unsigned)node->data.literal.char_val);
                 cg_inst(cg, buf);
             }
             break;
@@ -1316,6 +1315,9 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 /* Try to infer from the variable's declared type */
                 /* For now, check if the variable has a type annotation */
                 /* We'll look up the let declaration */
+                if (is_string_expr(node->data.index.target)) {
+                    elem_size = 1;
+                }
             }
             /* Scale index by element size */
             switch (elem_size) {
@@ -1326,7 +1328,13 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 default:
                     cg_inst(cg, "shl rcx, 3"); cg_inst1(cg, "add", "rax, rcx"); break;
             }
-            cg_inst(cg, "mov rax, [rax]");
+            /* Read element from computed address */
+            switch (elem_size) {
+                case 1: cg_inst(cg, "movzx eax, byte [rax]"); break;
+                case 2: cg_inst(cg, "movzx eax, word [rax]"); break;
+                case 4: cg_inst(cg, "mov eax, [rax]"); break;
+                default: cg_inst(cg, "mov rax, [rax]"); break;
+            }
             break;
         }
 
@@ -1410,8 +1418,8 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case BIN_BIT_AND: cg_inst1(cg, "and", "rax, rcx"); break;
                 case BIN_BIT_OR:  cg_inst1(cg, "or",  "rax, rcx"); break;
                 case BIN_BIT_XOR: cg_inst1(cg, "xor", "rax, rcx"); break;
-                case BIN_SHL:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shl", "rax, cl"); break;
-                case BIN_SHR:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shr", "rax, cl"); break;
+                case BIN_SHL:     cg_inst1(cg, "shl", "rax, cl"); break;
+                case BIN_SHR:     cg_inst1(cg, "shr", "rax, cl"); break;
                 /* Assignment: x = expr — store result to variable's stack slot */
                 case BIN_ASSIGN: {
                     cg_comment(cg, "assign");
@@ -1576,17 +1584,14 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 memcpy(fn_name, node->data.call.callee->data.ident.name.data, nlen);
                 fn_name[nlen] = '\0';
 
-                /* Built-in: print(string) — emit write syscall inline */
+                /* Built-in: print(string) — host: write syscall, freestanding: 0x5008 syscall page */
                 if (strcmp(fn_name, "print") == 0 && node->data.call.args.count >= 1) {
                     AstNode *arg = node->data.call.args.items[0];
                     cg_comment(cg, "print() built-in");
                     if (arg->type == NODE_LITERAL_STRING) {
                         const char *label = cg_emit_string(cg, arg->data.literal.string_val);
-
-                        /* Compute processed length */
                         char processed[8192];
                         int plen = process_string_literal(arg->data.literal.string_val, processed, sizeof(processed) - 1);
-
                         if (cg->target == TARGET_MACHO64) {
                             cg_inst1(cg, "mov", "rdi, 1");
                             cg_write_fmt(cg, "    lea rsi, [rel %s]\n", label);
@@ -1600,22 +1605,19 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                             cg_inst1(cg, "mov", "rax, 1");
                             cg_inst(cg, "syscall");
                         } else {
-                            /* Freestanding: print() is a no-op (kernel uses serial) */
-                            cg_comment(cg, "freestanding: print() is a no-op");
+                            /* Freestanding: call through kernel syscall page slot 1 (puts) */
+                            cg_inst(cg, "mov rax, [0x5008]");
+                            cg_inst(cg, "call rax");
                         }
                         cg_inst1(cg, "xor", "rax, rax");
                     } else {
-                        /* Runtime string: evaluate expression, then call write syscall with strlen */
                         cg_comment(cg, "print() runtime string");
                         cg_expr(cg, arg, slots);
-                        /* Auto-convert numeric to string for print() */
                         if (is_numeric_expr(arg)) {
                             cg_inst1(cg, "mov", "rdi, rax");
                             cg_inst(cg, "call __aether_itoa");
                         }
-                        /* rax = string pointer, save it */
                         cg_inst1(cg, "push", "rax");
-                        /* Compute strlen — handle null pointer */
                         int sl_id = cg->label_counter++;
                         cg_inst(cg, "xor rcx, rcx");
                         cg_inst(cg, "test rax, rax");
@@ -1627,7 +1629,6 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         cg_write_fmt(cg, "    inc rcx\n");
                         cg_write_fmt(cg, "    jmp .strlen_loop_%d\n", sl_id);
                         cg_write_fmt(cg, ".strlen_done_%d:\n", sl_id);
-                        /* rcx = length, pop rsi = string pointer */
                         cg_inst1(cg, "pop", "rsi");
                         cg_inst1(cg, "mov", "rdx, rcx");
                         if (cg->target == TARGET_MACHO64) {
@@ -1639,7 +1640,8 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                             cg_inst1(cg, "mov", "rax, 1");
                             cg_inst(cg, "syscall");
                         } else {
-                            cg_comment(cg, "freestanding: print() is a no-op");
+                            cg_inst(cg, "mov rax, [0x5008]");
+                            cg_inst(cg, "call rax");
                         }
                         cg_inst1(cg, "xor", "rax, rax");
                     }
@@ -2448,7 +2450,17 @@ static void cg_func(Codegen *cg, AstNode *func) {
     }
     if (!body_has_return) {
         cg_comment(cg, "default return");
-        if (func->data.func.return_type) {
+        /* Check if body is/was an asm block — if so, asm already set rax */
+        int body_is_asm = 0;
+        if (func->data.func.body && func->data.func.body->type == NODE_ASM_BLOCK) {
+            body_is_asm = 1;
+        } else if (func->data.func.body && func->data.func.body->type == NODE_BLOCK) {
+            AstNodeList *stmts = &func->data.func.body->data.list;
+            if (stmts->count > 0 && stmts->items[stmts->count - 1]->type == NODE_ASM_BLOCK) {
+                body_is_asm = 1;
+            }
+        }
+        if (!body_is_asm && func->data.func.return_type) {
             cg_inst(cg, "xor rax, rax");  /* default return value = 0 */
         }
         if (func->data.func.is_throws) {
@@ -3323,12 +3335,11 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "\n");
     }
 
-    /* Emit string table — uses the label stored in each StringEntry */
-    if (!cg->has_layout) {
+    /* Emit string table at the end — all string literals are collected during codegen */
+    if (string_entries) {
         cg_write(cg, "section .rodata\n");
         for (StringEntry *e = string_entries; e; e = e->next) {
             cg_write_fmt(cg, "Lstr%d: db ", e->label_num);
-            /* Emit printable chars between quotes, non-printable as numeric */
             cg_write(cg, "\"");
             for (size_t i = 0; i < e->sv.len; i++) {
                 unsigned char c = (unsigned char)e->sv.data[i];
@@ -3336,7 +3347,6 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                 else if (c == '\\') cg_write(cg, "\\\\");
                 else if (c >= 32 && c < 127) { char buf[2] = {c, 0}; cg_write(cg, buf); }
                 else {
-                    /* Non-printable: close string, emit as numeric, reopen */
                     cg_write_fmt(cg, "\", %u, \"", c);
                 }
             }
@@ -3483,9 +3493,8 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
 
     /* .aelib library target: assemble to .o, extract metadata, write .aelib */
     if (cg->target == TARGET_LIB) {
-        /* Determine host-appropriate NASM format */
-        Target host_target = codegen_detect_host();
-        const char *nasm_fmt = (host_target == TARGET_MACHO64) ? "macho64" : "elf64";
+        /* Always use ELF64 for .aelib — the object code is used across toolchains */
+        const char *nasm_fmt = "elf64";
 
         /* Assemble .asm → .o via NASM */
         char obj_file[1024];
@@ -3700,7 +3709,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return 0;
     }
 
-    snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o %s %s", nasm_format, obj_file, asm_file);
+    snprintf(cmd, sizeof(cmd), "nasm -O2 -Wno-label-redef-late -f %s -o %s %s", nasm_format, obj_file, asm_file);
     int ret = system(cmd);
     if (ret != 0) {
         fprintf(stderr, "nasm failed (exit %d)\n", ret);

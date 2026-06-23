@@ -1,5 +1,12 @@
 # std/io.ae — I/O operations: print, format, write
-# print() is a compiler built-in. println() adds a newline.
+# print() calls through the syscall page (slot 1 = puts).
+# println() adds a newline.
+
+sys func puts(s: string) at(1)
+
+func print(value: string) {
+    puts(value)
+}
 
 func println(value: string) {
     print(value + "\n")

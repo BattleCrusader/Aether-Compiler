@@ -157,7 +157,7 @@ LIBAETHER_AELIB = build/lib/libaether.aelib
 
 $(LIBAETHER_AELIB): aether-cli $(LIBAETHER_SRCS)
 	@echo "=== Building libaether.aelib ==="
-	@mkdir -p build/lib
+	@mkdir -p build/lib /tmp/kernel
 	@cat $(LIBAETHER_SRCS) > /tmp/libaether_combined.ae
 	@./$(BUILD_DIR)/aether --target lib /tmp/libaether_combined.ae -o $(LIBAETHER_AELIB) 2>/dev/null >/dev/null && echo "  libaether.aelib built OK" || echo "  FAILED"
 

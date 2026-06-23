@@ -5,6 +5,11 @@
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
 > working end-to-end. Phase 18 (standard library in pure Aether) is complete.
+> Asm-block rax preservation fix: functions whose last statement is an asm block
+> no longer get `xor rax, rax` inserted before the epilogue, so asm helpers that
+> set rax as a return value work correctly. `.aelib` archives now always use ELF64
+> format (universal, not host-specific). `print()` built-in now uses 0x5008 syscall
+> page on freestanding targets.
 > Test fixtures use `@test` function attributes (bare or with `expect=N`).
 > Standard library provides `std/test.ae` with JUnit-style `assertEquals`/`assertTrue`.
 > STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.
@@ -525,7 +530,8 @@ Future iterations add: multi-arch, dynamic linking, function-level imports, full
 - **Compile-time**: `comptime` functions, not a separate macro system
 - **Indentation**: Braces for blocks, newlines separate statements
 - **Host native**: Multi-backend codegen; host syscall ABI instead of 0x5000 table
-- **`+` operator**: Does string concat when either operand is a string, numeric addition when both are numbers
+- **`print()`**: Was a compiler built-in that emitted `write` syscall inline on host targets and was a no-op on freestanding. Now a regular library function in `std/io.ae` that calls through `sys func puts`. All test fixtures updated to import `libaether` for `print`.
+- **`.aelib` universal format**: TODO — currently `.aelib` archives contain host-format object code (Mach-O on macOS, ELF on Linux). They should contain architecture-independent metadata so the same `.aelib` works on any machine. This requires a proper intermediate representation rather than raw `.o` embedding.
 - **Build output**: All intermediate and output files go to `/tmp/kernel/` for easy cleanup
 - **Segfault handling**: Host uses sigsetjmp/siglongjmp via C helper (segfault_helper.c).
   Kernel target uses IDT-based fault handling (OS repo). __aether_segfault_jmpbuf in BSS.
