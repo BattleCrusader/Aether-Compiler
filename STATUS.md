@@ -4,7 +4,8 @@
 > **Current state**: 44/45 host-native tests passing. 15/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
-> working end-to-end. Test fixtures use `@test(expect=N)` function attributes (not comments).
+> working end-to-end. Test fixtures use `@test` function attributes (bare or with `expect=N`).
+> Standard library provides `std/test.ae` with JUnit-style `assertEquals`/`assertTrue`.
 > STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.
 
 ---
@@ -311,6 +312,15 @@ Closed-source library distribution without reverse engineering risk.
    remaining phases: Language Spec → 12, Concurrency → 13, Advanced OS Lang → 14,
    Goal-Oriented I/O → 15, Protocol → 16, .aelib → 17. OS issues now live in
    the OS repo's STATUS.md.
+3. **`std/test.ae` completed** — JUnit-style test framework with `assertEquals`/`assertTrue`.
+   Assertions print PASS/FAIL and call `exit(1)` on failure (like AssertionError).
+   No return chaining or if blocks needed in test functions.
+4. **`exit()` built-in** — Compiler emits exit syscall inline (macOS 0x2000001, Linux 60).
+   Registered in semantic analyzer so it resolves like `print()`.
+5. **`@test` without `expect=N`** — Bare `@test` works, defaults to `expect=0`.
+   All `@test(expect=0)` fixtures updated to bare `@test`.
+6. **Import resolution** — Fallback to try import path directly (e.g. `"std/test"` resolves
+   to `std/test.ae` relative to CWD) when file-relative resolution fails.
 
 7. **Auto-generated test dispatcher** — When `@test` functions exist but no `main()` is
    provided, the compiler emits a `main:` that takes the function name as argv[1],
