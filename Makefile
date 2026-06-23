@@ -37,7 +37,8 @@ CORE_SRCS = \
 	src/asm_backend_arm64.c \
 	src/asm_backend_riscv64.c \
 	src/universal.c \
-	src/optimizer.c
+	src/optimizer.c \
+	src/aelib.c
 
 # aether.o has main() — linked separately so test executables don't get duplicate main
 AETHER_MAIN_SRC = src/aether.c
