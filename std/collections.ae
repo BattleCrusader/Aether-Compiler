@@ -1,32 +1,30 @@
 # std/collections.ae — Simple collections: Array, List
-# Freestanding standard library — stub implementations
+# Pure Aether structs.
 
 struct Array {
     data: u64
-    len: u64
-    cap: u64
+    length: u64
+    capacity: u64
 }
 
 struct List {
     data: u64
-    len: u64
-    cap: u64
+    length: u64
+    capacity: u64
 }
 
-func array_new(): Array {
-    asm {
-        xor rax, rax
-        xor rdx, rdx
-    }
+func arrayNew(): Array {
+    let result: Array
+    result.data = 0
+    result.length = 0
+    result.capacity = 0
+    return result
 }
 
-func list_new(): List {
-    asm {
-        xor rax, rax
-        xor rdx, rdx
-    }
-}
-
-func main(): u64 {
-    return 0
+func listNew(): List {
+    let result: List
+    result.data = 0
+    result.length = 0
+    result.capacity = 0
+    return result
 }

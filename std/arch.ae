@@ -1,16 +1,11 @@
-# std.arch — Architecture detection and multi-target helpers
-#
-# Provides compile-time and runtime architecture detection.
-# The multi-target assembler translates these to the correct
-# architecture-specific instructions.
+# std/arch.ae — Architecture detection and multi-target helpers
+# archDetect uses asm for CPUID (can't be done in pure Aether).
 
-# Architecture identifiers
-const ARCH_X86_64 = 0
-const ARCH_ARM64 = 1
-const ARCH_RISCV64 = 2
+const archX8664 = 0
+const archArm64 = 1
+const archRiscv64 = 2
 
-# Runtime architecture detection via CPUID
-func arch_detect(): u64 {
+func archDetect(): u64 {
     asm {
         pushfq
         pushfq
@@ -23,18 +18,15 @@ func arch_detect(): u64 {
         popfq
         test rax, rax
         jnz .x86
-        mov rax, 1  /* ARM64 fallthrough */
+        mov rax, 1
         jmp .done
     .x86:
-        mov rax, 0  /* x86_64 */
+        xor rax, rax
     .done:
     }
 }
 
-# Cache line size per architecture
-const CACHE_LINE_X86_64 = 64
-const CACHE_LINE_ARM64 = 64
-const CACHE_LINE_RISCV64 = 64
-
-# Page size (standard 4KB for all architectures)
-const PAGE_SIZE = 4096
+const cacheLineX8664 = 64
+const cacheLineArm64 = 64
+const cacheLineRiscv64 = 64
+const pageSize = 4096

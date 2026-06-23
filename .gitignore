@@ -11,3 +11,4 @@ tests/fixtures/test_enum
 tests/fixtures/test_match
 tests/fixtures/hello_native
 tests/fixtures/test_defer
+*.aelib

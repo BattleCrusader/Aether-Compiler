@@ -1,38 +1,85 @@
 # std/serial.ae — COM1 serial I/O for kernel mode
-# Freestanding standard library — stub implementations
+# Uses asm for port I/O (in/out instructions — cannot be done in pure Aether).
 
-const COM1_PORT = 0x3F8
+const com1Port = 0x3F8
 
-func serial_init(): bool {
+func serialInit(): bool {
     asm {
-        ; initialize COM1 serial port
-        xor eax, eax
+        mov dx, 0x3F8
+        add dx, 1
+        xor al, al
+        out dx, al
+        mov dx, 0x3F8
+        add dx, 3
+        mov al, 0x80
+        out dx, al
+        mov dx, 0x3F8
+        mov al, 1
+        out dx, al
+        mov dx, 0x3F8
+        add dx, 1
+        xor al, al
+        out dx, al
+        mov dx, 0x3F8
+        add dx, 3
+        mov al, 3
+        out dx, al
+        mov dx, 0x3F8
+        add dx, 2
+        mov al, 0xC7
+        out dx, al
+        mov dx, 0x3F8
+        add dx, 4
+        mov al, 0x0B
+        out dx, al
+        mov al, 1
     }
-    return false
 }
 
-func serial_putc(c: byte) {
+func serialPutc(character: byte) {
     asm {
-        ; write one byte to COM1
-        nop
+        mov dx, 0x3F8
+        add dx, 5
+    .wait:
+        in al, dx
+        test al, 0x20
+        jz .wait
+        mov dx, 0x3F8
+        mov al, dil
+        out dx, al
     }
 }
 
-func serial_puts(s: string) {
+func serialPuts(inputString: string) {
     asm {
-        ; write string to COM1
-        nop
+        mov rsi, rdi
+    .loop:
+        lodsb
+        test al, al
+        jz .done
+        mov dx, 0x3F8
+        add dx, 5
+    .wait:
+        in al, dx
+        test al, 0x20
+        jz .wait
+        mov dx, 0x3F8
+        mov al, [rsi-1]
+        out dx, al
+        jmp .loop
+    .done:
     }
 }
 
-func serial_getc(): byte {
+func serialGetc(): byte {
     asm {
-        ; read one byte from COM1
-        xor eax, eax
+        mov dx, 0x3F8
+        add dx, 5
+    .wait:
+        in al, dx
+        test al, 1
+        jz .wait
+        mov dx, 0x3F8
+        in al, dx
     }
-    return 0
-}
-
-func main(): u64 {
-    return 0
 }

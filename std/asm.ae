@@ -1,9 +1,6 @@
-# std.asm — NASM helper macros and common sequences
-#
-# Provides commonly-used NASM assembly sequences as Aether functions.
-# These are inlined by the compiler for zero-overhead use.
+# std/asm.ae — Low-level CPU operations
+# Only uses asm for things Aether cannot express: port I/O, CPU control, memory barriers.
 
-# Memory barriers
 @force_inline
 func mfence() {
     asm { mfence }
@@ -19,25 +16,23 @@ func lfence() {
     asm { lfence }
 }
 
-# I/O port access
 @force_inline
-func outb(port: u16, value: u8) {
+func outb(portNumber: u16, value: u8) {
     asm {
-        mov dx, port
-        mov al, value
+        mov dx, di
+        mov al, sil
         out dx, al
     }
 }
 
 @force_inline
-func inb(port: u16): u8 {
+func inb(portNumber: u16): u8 {
     asm {
-        mov dx, port
+        mov dx, di
         in al, dx
     }
 }
 
-# CPU control
 @force_inline
 func cli() {
     asm { cli }
@@ -53,13 +48,11 @@ func hlt() {
     asm { hlt }
 }
 
-# Timestamp counter
 @force_inline
 func rdtsc(): u64 {
-    let hi: u32
-    let lo: u32
-    asm: (hi, lo) {
+    asm {
         rdtsc
+        shl rdx, 32
+        or rax, rdx
     }
-    return (u64(hi) << 32) | u64(lo)
 }

@@ -1,41 +1,26 @@
-# std/str.ae — String operations: concat, split, trim, to_upper, to_lower
-# Freestanding standard library — stub implementations
+# std/str.ae — String operations: concat, split, trim, toUpper, toLower
+# Uses Aether's + operator for string concatenation.
 
-func concat(a: string, b: string): string {
-    asm {
-        ; concatenate two strings, return new string in rax
-        xor rax, rax
-    }
+func concat(firstString: string, secondString: string): string {
+    return firstString + secondString
 }
 
-func split(s: string, delimiter: string): [string] {
-    asm {
-        ; split string by delimiter, return pointer to slice
-        xor rax, rax
-    }
+func split(inputString: string, delimiter: string): [string] {
+    # TODO: implement string split
+    return []
 }
 
-func trim(s: string): string {
-    asm {
-        ; trim leading/trailing whitespace
-        xor rax, rax
-    }
+func trim(inputString: string): string {
+    # TODO: implement string trim
+    return inputString
 }
 
-func to_upper(s: string): string {
-    asm {
-        ; convert to uppercase
-        xor rax, rax
-    }
+func toUpper(inputString: string): string {
+    # TODO: implement string toUpper
+    return inputString
 }
 
-func to_lower(s: string): string {
-    asm {
-        ; convert to lowercase
-        xor rax, rax
-    }
-}
-
-func main(): u64 {
-    return 0
+func toLower(inputString: string): string {
+    # TODO: implement string toLower
+    return inputString
 }

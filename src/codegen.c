@@ -1568,7 +1568,7 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
 
         case NODE_CALL: {
             /* Check for built-in functions on host targets */
-            bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
+            bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST || cg->target == TARGET_LIB);
             if (is_host && node->data.call.callee->type == NODE_IDENT) {
                 char fn_name[256];
                 int nlen = (int)node->data.call.callee->data.ident.name.len;
@@ -2981,7 +2981,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
 
     /* Emit runtime helpers and data sections — BEFORE user functions */
     if (!cg->has_layout) {
-        bool needs_runtime = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST || cg->target == TARGET_BINARY);
+        bool needs_runtime = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST || cg->target == TARGET_BINARY || cg->target == TARGET_LIB);
         if (needs_runtime) {
             /* Bump allocator state in .bss */
             cg_write(cg, "section .bss\n");
