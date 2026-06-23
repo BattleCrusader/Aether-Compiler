@@ -1070,6 +1070,7 @@ int main(int argc, char **argv) {
             /* Try to open the file */
             FILE *ifile = NULL;
             char *resolved_path = NULL;
+            char std_resolved[1024]; /* persistent buffer for std path resolution */
 
             if (!is_aelib) {
                 ifile = fopen(ae_path, "rb");
@@ -1085,7 +1086,24 @@ int main(int argc, char **argv) {
             }
 
             if (!ifile) {
-                fprintf(stderr, "Error: cannot open import '%s' (tried .ae and .aelib)\n", import_path);
+                /* Try the import path directly (it may already be a valid path
+                 * like "std/test.ae" relative to CWD) */
+                char sp_ae[1024], sp_aelib[1024];
+                snprintf(sp_ae, sizeof(sp_ae), "%.*s.ae", (int)path_len, path_start);
+                snprintf(sp_aelib, sizeof(sp_aelib), "%.*s.aelib", (int)path_len, path_start);
+                if (verbose) printf("  std fallback: trying '%s' and '%s'\n", sp_ae, sp_aelib);
+                if (!is_aelib) {
+                    ifile = fopen(sp_ae, "rb");
+                    if (ifile) { snprintf(std_resolved, sizeof(std_resolved), "%s", sp_ae); resolved_path = std_resolved; }
+                }
+                if (!ifile) {
+                    ifile = fopen(sp_aelib, "rb");
+                    if (ifile) { snprintf(std_resolved, sizeof(std_resolved), "%s", sp_aelib); resolved_path = std_resolved; is_aelib = true; }
+                }
+            }
+
+            if (!ifile) {
+                fprintf(stderr, "Error: cannot open import '%s' (tried .ae, .aelib, and std paths)\n", import_path);
                 return 1;
             }
 

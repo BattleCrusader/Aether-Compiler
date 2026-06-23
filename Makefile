@@ -144,7 +144,8 @@ TEST_FIXTURES = \
 	tests/fixtures/test_args.ae \
 	tests/fixtures/test_null_concat.ae \
 	tests/fixtures/test_logical_keywords.ae \
-	tests/fixtures/test_aelib_import.ae
+	tests/fixtures/test_aelib_import.ae \
+	tests/fixtures/test_std_test.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \

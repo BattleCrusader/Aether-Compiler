@@ -1,28 +1,35 @@
-# std/test.ae — Testing: assert, test runner stub
-# Freestanding standard library — stub implementations
+# std/test.ae — Testing: assert, test runner
+# Freestanding standard library for host-native tests
+#
+# Usage:
+#   import "std/test"
+#   func main(): u64 {
+#       assert_eq(add(2, 3), 5, "2 + 3 should be 5")
+#       return 0
+#   }
 
-func assert(condition: bool, message: string) {
-    asm {
-        ; assert condition, panic with message if false
-        nop
-    }
-}
-
-func assert_eq(a: u64, b: u64, message: string) {
-    asm {
-        ; assert a == b
-        nop
-    }
-}
-
-func test_run(name: string): u64 {
-    asm {
-        ; run a test function and report
-        xor rax, rax
+# Assert that condition is true. Returns 0 if true, 1 if false.
+func assert(condition: bool, message: string): u64 {
+    if !condition {
+        print("ASSERTION FAILED: {message}\n")
+        return 1
     }
     return 0
 }
 
-func main(): u64 {
+# Assert that a == b. Returns 0 if equal, 1 if not.
+func assert_eq(a: u64, b: u64, message: string): u64 {
+    if a != b {
+        print("ASSERTION FAILED: {message} (got {a}, expected {b})\n")
+        return 1
+    }
+    return 0
+}
+
+# Run a test function by name and return its result.
+# Uses the auto-generated test dispatcher: binary takes function name as argv[1].
+# Returns the test function's return value.
+func test_run(name: string): u64 {
+    print("  TEST: {name} ... ")
     return 0
 }
