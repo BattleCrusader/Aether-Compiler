@@ -1,38 +1,35 @@
 # std/mem.ae — Memory operations: copy, zero, alloc, free
-# Freestanding standard library — stub implementations
+# Freestanding standard library
+#
+# SysV ABI: rdi=arg1, rsi=arg2, rdx=arg3, rax=return.
 
-func mem_copy(dest: u64, src: u64, size: u64) {
+# Copy memory from source to destination.
+func memCopy(destination: u64, source: u64, byteCount: u64) {
     asm {
-        ; memcpy implementation
-        ; rdi = dest, rsi = src, rdx = size
-        nop
+        mov rcx, rdx
+        rep movsb
     }
 }
 
-func mem_zero(ptr: u64, size: u64) {
+# Zero memory at pointer for byteCount bytes.
+func memZero(pointer: u64, byteCount: u64) {
     asm {
-        ; memset(ptr, 0, size)
-        nop
+        mov rcx, rsi
+        xor al, al
+        rep stosb
     }
 }
 
-func alloc(size: u64): u64 {
+# Allocate byteCount bytes from the bump allocator.
+func alloc(byteCount: u64): u64 {
     asm {
-        ; allocate size bytes, return pointer
-        ; freestanding: sbrk / brk
-        ; host: malloc
-        nop
-    }
-    return 0
-}
-
-func free(ptr: u64) {
-    asm {
-        ; free allocated memory
-        nop
+        call __aether_alloc
     }
 }
 
-func main(): u64 {
-    return 0
+# Free is a no-op with the bump allocator (all memory freed at once).
+func free(pointer: u64) {
+    asm {
+        ; bump allocator: no-op
+    }
 }

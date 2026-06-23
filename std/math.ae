@@ -1,38 +1,42 @@
 # std/math.ae — Basic math: abs, min, max, clamp
-# Freestanding standard library — stub implementations
+# Freestanding standard library
+#
+# All functions use SysV ABI: rdi=firstArg, rsi=secondArg, rdx=thirdArg, rax=return.
 
-func abs_val(value: int): int {
+# Absolute value of a signed integer.
+func absValue(value: int): int {
     asm {
-        ; |value|
-        xor eax, eax
+        mov rax, rdi
+        neg rax
+        cmovl rax, rdi
     }
-    return 0
 }
 
-func min_val(a: int, b: int): int {
+# Minimum of two signed integers.
+func min(firstValue: int, secondValue: int): int {
     asm {
-        ; min(a, b)
-        xor eax, eax
+        mov rax, rdi
+        cmp rdi, rsi
+        cmovg rax, rsi
     }
-    return 0
 }
 
-func max_val(a: int, b: int): int {
+# Maximum of two signed integers.
+func max(firstValue: int, secondValue: int): int {
     asm {
-        ; max(a, b)
-        xor eax, eax
+        mov rax, rdi
+        cmp rdi, rsi
+        cmovl rax, rsi
     }
-    return 0
 }
 
-func clamp_val(value: int, lo: int, hi: int): int {
+# Clamp value between lowerBound and upperBound (inclusive).
+func clamp(value: int, lowerBound: int, upperBound: int): int {
     asm {
-        ; clamp value between lo and hi
-        xor eax, eax
+        mov rax, rdi
+        cmp rdi, rsi
+        cmovl rax, rsi
+        cmp rax, rdx
+        cmovg rax, rdx
     }
-    return 0
-}
-
-func main(): u64 {
-    return 0
 }

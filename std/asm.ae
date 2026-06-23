@@ -1,7 +1,8 @@
-# std.asm — NASM helper macros and common sequences
+# std/asm.ae — NASM helper macros and common sequences
+# Freestanding standard library
 #
 # Provides commonly-used NASM assembly sequences as Aether functions.
-# These are inlined by the compiler for zero-overhead use.
+# SysV ABI: rdi=arg1, rsi=arg2, rdx=arg3, rcx=arg4, r8=arg5, r9=arg6, rax=return.
 
 # Memory barriers
 @force_inline
@@ -21,18 +22,18 @@ func lfence() {
 
 # I/O port access
 @force_inline
-func outb(port: u16, value: u8) {
+func outb(portNumber: u16, value: u8) {
     asm {
-        mov dx, port
-        mov al, value
+        mov dx, di
+        mov al, sil
         out dx, al
     }
 }
 
 @force_inline
-func inb(port: u16): u8 {
+func inb(portNumber: u16): u8 {
     asm {
-        mov dx, port
+        mov dx, di
         in al, dx
     }
 }
@@ -56,10 +57,9 @@ func hlt() {
 # Timestamp counter
 @force_inline
 func rdtsc(): u64 {
-    let hi: u32
-    let lo: u32
-    asm: (hi, lo) {
+    asm {
         rdtsc
+        shl rdx, 32
+        or rax, rdx
     }
-    return (u64(hi) << 32) | u64(lo)
 }

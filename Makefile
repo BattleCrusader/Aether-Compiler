@@ -151,6 +151,15 @@ TEST_FIXTURES = \
 AELIB_FIXTURES = \
 	tests/fixtures/lib_math.ae
 
+# libaether.aelib — combined standard library archive
+LIBAETHER_SRCS = std/arch.ae std/asm.ae std/collections.ae std/elf.ae std/fs.ae std/io.ae std/math.ae std/mem.ae std/serial.ae std/str.ae std/test.ae
+LIBAETHER_AELIB = std/libaether.aelib
+
+$(LIBAETHER_AELIB): aether-cli $(LIBAETHER_SRCS)
+	@echo "=== Building libaether.aelib ==="
+	@cat $(LIBAETHER_SRCS) > /tmp/libaether_combined.ae
+	@./$(BUILD_DIR)/aether --target lib /tmp/libaether_combined.ae -o $(LIBAETHER_AELIB) 2>/dev/null >/dev/null && echo "  libaether.aelib built OK" || echo "  FAILED"
+
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
 	tests/fixtures/test_layout.ae
@@ -164,7 +173,7 @@ NEW_TARGET_FIXTURES = \
 	tests/fixtures/test_binary_target.ae \
 	tests/fixtures/test_boot_target.ae
 
-test-host: aether-cli
+test-host: aether-cli $(LIBAETHER_AELIB)
 	@echo "=== Building .aelib library fixtures ==="
 	@for fixture in $(AELIB_FIXTURES); do \
 		name=$$(basename $$fixture .ae); \

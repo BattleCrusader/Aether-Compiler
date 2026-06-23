@@ -1,32 +1,28 @@
 # std/collections.ae — Simple collections: Array, List
-# Freestanding standard library — stub implementations
+# Freestanding standard library
 
 struct Array {
     data: u64
-    len: u64
-    cap: u64
+    length: u64
+    capacity: u64
 }
 
 struct List {
     data: u64
-    len: u64
-    cap: u64
+    length: u64
+    capacity: u64
 }
 
-func array_new(): Array {
+func arrayNew(): Array {
     asm {
         xor rax, rax
         xor rdx, rdx
     }
 }
 
-func list_new(): List {
+func listNew(): List {
     asm {
         xor rax, rax
         xor rdx, rdx
     }
-}
-
-func main(): u64 {
-    return 0
 }
