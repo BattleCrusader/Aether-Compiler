@@ -1225,10 +1225,9 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_LITERAL_CHAR:
-            cg_inst1(cg, "movzx", "eax, byte 0");
             {
                 char buf[32];
-                snprintf(buf, sizeof(buf), "mov rax, %u", (unsigned)node->data.literal.char_val);
+                snprintf(buf, sizeof(buf), "mov eax, %u", (unsigned)node->data.literal.char_val);
                 cg_inst(cg, buf);
             }
             break;
@@ -1316,6 +1315,9 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 /* Try to infer from the variable's declared type */
                 /* For now, check if the variable has a type annotation */
                 /* We'll look up the let declaration */
+                if (is_string_expr(node->data.index.target)) {
+                    elem_size = 1;
+                }
             }
             /* Scale index by element size */
             switch (elem_size) {
@@ -1326,7 +1328,13 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 default:
                     cg_inst(cg, "shl rcx, 3"); cg_inst1(cg, "add", "rax, rcx"); break;
             }
-            cg_inst(cg, "mov rax, [rax]");
+            /* Read element from computed address */
+            switch (elem_size) {
+                case 1: cg_inst(cg, "movzx eax, byte [rax]"); break;
+                case 2: cg_inst(cg, "movzx eax, word [rax]"); break;
+                case 4: cg_inst(cg, "mov eax, [rax]"); break;
+                default: cg_inst(cg, "mov rax, [rax]"); break;
+            }
             break;
         }
 
