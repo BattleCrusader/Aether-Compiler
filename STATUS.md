@@ -3,7 +3,7 @@
 > **Last updated**: 2026-06-24
 > **Current state**: 44/45 host-native tests passing. 15/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
-> implemented and tested. Phase 19 (.aelib library format) designed but not yet implemented.
+> implemented and tested. Phase 17 (.aelib library format) designed but not yet implemented.
 > Test fixtures use `@test(expect=N)` function attributes (not comments).
 > STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.
 
