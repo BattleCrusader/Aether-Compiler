@@ -2877,8 +2877,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     }
 
     /* Entry point — skip for @layout (flat binaries define their own entry) */
-    /* Also skip for .aelib libraries (no entry point needed) */
-    if (!cg->has_layout && cg->target != TARGET_LIB) {
+    /* Also skip for .aelib libraries and modules (no entry point needed) */
+    if (!cg->has_layout && cg->target != TARGET_LIB && cg->target != TARGET_MODULE) {
         if (cg->entry_func) {
             /* @entry(addr) is set — function IS the entry point directly */
             cg_write_fmt(cg, "; Entry point: %s at 0x%lx\n", cg->entry_func, (unsigned long)cg->entry_addr);
@@ -2970,6 +2970,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             } else if (cg->target == TARGET_BINARY) {
                 cg_comment(cg, "Aether OS binary: ret to shell after main returns");
                 cg_inst(cg, "ret");
+            } else if (cg->target == TARGET_MODULE) {
+                cg_comment(cg, "module: no entry wrapper needed — kernel calls mod_init directly");
             } else {
                 cg_comment(cg, "freestanding: just hlt after main returns");
                 cg_inst(cg, "hlt");
