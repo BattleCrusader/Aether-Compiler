@@ -153,10 +153,11 @@ AELIB_FIXTURES = \
 
 # libaether.aelib — combined standard library archive
 LIBAETHER_SRCS = std/arch.ae std/asm.ae std/collections.ae std/elf.ae std/fs.ae std/io.ae std/math.ae std/mem.ae std/serial.ae std/str.ae std/test.ae
-LIBAETHER_AELIB = std/libaether.aelib
+LIBAETHER_AELIB = build/lib/libaether.aelib
 
 $(LIBAETHER_AELIB): aether-cli $(LIBAETHER_SRCS)
 	@echo "=== Building libaether.aelib ==="
+	@mkdir -p build/lib
 	@cat $(LIBAETHER_SRCS) > /tmp/libaether_combined.ae
 	@./$(BUILD_DIR)/aether --target lib /tmp/libaether_combined.ae -o $(LIBAETHER_AELIB) 2>/dev/null >/dev/null && echo "  libaether.aelib built OK" || echo "  FAILED"
 
@@ -220,54 +221,38 @@ test-layout: aether-cli
 	[ $$pass -eq $$total ]
 
 # Install the aether compiler and standard library to the system
-install: aether-cli
+install: aether-cli $(LIBAETHER_AELIB)
 	@echo "Installing Aether compiler..."
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(BUILD_DIR)/aether $(DESTDIR)$(BINDIR)/aether
 	@echo "  -> $(DESTDIR)$(BINDIR)/aether"
 	@echo "Installing standard library..."
 	install -d $(DESTDIR)$(LIBDIR)
-	for f in std/*.ae; do \
-		install -m 644 $$f $(DESTDIR)$(LIBDIR)/$$(basename $$f); \
-		echo "  -> $(DESTDIR)$(LIBDIR)/$$(basename $$f)"; \
-	done
-	@echo "Installing header files..."
-	install -d $(DESTDIR)$(LIBDIR)/include
-	for f in include/aether/*.h; do \
-		install -m 644 $$f $(DESTDIR)$(LIBDIR)/include/$$(basename $$f); \
-		echo "  -> $(DESTDIR)$(LIBDIR)/include/$$(basename $$f)"; \
-	done
+	install -m 644 $(LIBAETHER_AELIB) $(DESTDIR)$(LIBDIR)/libaether.aelib
+	@echo "  -> $(DESTDIR)$(LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "Aether compiler installed successfully."
 	@echo "  Binary:  $(DESTDIR)$(BINDIR)/aether"
-	@echo "  Stdlib:  $(DESTDIR)$(LIBDIR)/"
+	@echo "  Stdlib:  $(DESTDIR)$(LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "To use: aether --help"
 	@echo "To compile: aether build source.ae"
 	@echo "To run:    aether run source.ae"
 
 # Install locally to ~/.local (no sudo needed)
-install-local: aether-cli
+install-local: aether-cli $(LIBAETHER_AELIB)
 	@echo "Installing Aether compiler locally..."
 	install -d $(LOCAL_BINDIR)
 	install -m 755 $(BUILD_DIR)/aether $(LOCAL_BINDIR)/aether
 	@echo "  -> $(LOCAL_BINDIR)/aether"
 	@echo "Installing standard library..."
 	install -d $(LOCAL_LIBDIR)
-	for f in std/*.ae; do \
-		install -m 644 $$f $(LOCAL_LIBDIR)/$$(basename $$f); \
-		echo "  -> $(LOCAL_LIBDIR)/$$(basename $$f)"; \
-	done
-	@echo "Installing header files..."
-	install -d $(LOCAL_LIBDIR)/include
-	for f in include/aether/*.h; do \
-		install -m 644 $$f $(LOCAL_LIBDIR)/include/$$(basename $$f); \
-		echo "  -> $(LOCAL_LIBDIR)/include/$$(basename $$f)"; \
-	done
+	install -m 644 $(LIBAETHER_AELIB) $(LOCAL_LIBDIR)/libaether.aelib
+	@echo "  -> $(LOCAL_LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "Aether compiler installed locally."
 	@echo "  Binary:  $(LOCAL_BINDIR)/aether"
-	@echo "  Stdlib:  $(LOCAL_LIBDIR)/"
+	@echo "  Stdlib:  $(LOCAL_LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "Make sure $(LOCAL_BINDIR) is in your PATH."
 	@echo "To use: aether --help"
