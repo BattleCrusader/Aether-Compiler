@@ -317,6 +317,21 @@ All 11 std/*.ae files rewritten in pure Aether. Only asm where genuinely necessa
 5. **Conditional compilation** (`#if`/`#elif`/`#else`/`#end`) — not found in source.
 6. **Optimizer inline pass** — `opt_inline` function exists but likely a stub.
 
+## Missing Language Features (Needed for OS Work)
+
+The following features are needed by Aether OS but not yet implemented in the compiler.
+They are tracked here for prioritization.
+
+- **`sizeof(T)`** — compile-time size of a type. Needed for struct layout calculations
+  in filesystem code. NODE_SIZEOF exists in AST? No — needs full implementation.
+- **`as` type cast** — `expr as Type` syntax. NODE_CAST exists in AST but parser has
+  no `as` keyword or cast expression parsing. Needed for pointer arithmetic and
+  type-safe hardware access.
+- **`offsetof(Type, field)`** — compile-time field offset. Needed for on-disk struct
+  serialization. Not implemented.
+- **`unsafe { }` blocks** — exist in parser and codegen but need verification that
+  pointer arithmetic (ptr[index]) works inside them.
+
 > **Note**: OS implementation issues (binary execution, page tables, etc.) live in
 > the OS repo's STATUS.md. This file is compiler-only.
 
