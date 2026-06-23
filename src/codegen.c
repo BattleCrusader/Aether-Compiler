@@ -1418,8 +1418,8 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case BIN_BIT_AND: cg_inst1(cg, "and", "rax, rcx"); break;
                 case BIN_BIT_OR:  cg_inst1(cg, "or",  "rax, rcx"); break;
                 case BIN_BIT_XOR: cg_inst1(cg, "xor", "rax, rcx"); break;
-                case BIN_SHL:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shl", "rax, cl"); break;
-                case BIN_SHR:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shr", "rax, cl"); break;
+                case BIN_SHL:     cg_inst1(cg, "shl", "rax, cl"); break;
+                case BIN_SHR:     cg_inst1(cg, "shr", "rax, cl"); break;
                 /* Assignment: x = expr — store result to variable's stack slot */
                 case BIN_ASSIGN: {
                     cg_comment(cg, "assign");
