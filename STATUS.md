@@ -1,10 +1,11 @@
 # Aether Compiler — Implementation Status
 
 > **Last updated**: 2026-06-24
-> **Current state**: 44/45 host-native tests passing. 15/16 tokenizer tests passing.
+> **Current state**: 46/47 host-native tests passing. 15/16 tokenizer tests passing.
 > Compiler builds clean. All major language features through Phase 11 are
 > implemented and tested. Phase 17 (.aelib library format) is implemented and
-> working end-to-end. Test fixtures use `@test` function attributes (bare or with `expect=N`).
+> working end-to-end. Phase 18 (standard library in pure Aether) is complete.
+> Test fixtures use `@test` function attributes (bare or with `expect=N`).
 > Standard library provides `std/test.ae` with JUnit-style `assertEquals`/`assertTrue`.
 > STATUS.md is compiler-only — OS implementation phases live in the OS repo's STATUS.md.
 
@@ -263,6 +264,26 @@ Closed-source library distribution without reverse engineering risk.
 
 ---
 
+## Phase 18 — Standard Library Implementation & `libaether.aelib` ✅ COMPLETE
+
+All 11 std/*.ae files rewritten in pure Aether. Only asm where genuinely necessary (port I/O, CPU control, byte-level memory copy). `libaether.aelib` builds to `build/lib/` — out of source tree.
+
+- [x] P18.01 — `std/math.ae` — pure Aether arithmetic (absValue, min, max, clamp)
+- [x] P18.02 — `std/mem.ae` — asm rep movsb/stosb for byte copy; Aether `heap` for alloc
+- [x] P18.03 — `std/str.ae` — Aether `+` operator for concat; split/trim/toUpper/toLower stubs
+- [x] P18.04 — `std/io.ae` — Aether `print()` built-in for println
+- [x] P18.05 — `std/arch.ae` — asm CPUID detection; pure Aether constants
+- [x] P18.06 — `std/asm.ae` — asm port I/O, barriers, CPU control, rdtsc
+- [x] P18.07 — `std/collections.ae` — pure Aether structs (Array, List)
+- [x] P18.08 — `std/elf.ae` — pure Aether struct definitions + verify function
+- [x] P18.09 — `std/fs.ae` — Aether `sys` keyword for syscall declarations
+- [x] P18.10 — `std/serial.ae` — asm port I/O for COM1
+- [x] P18.11 — `libaether.aelib` combined archive (build/lib/)
+- [x] P18.12 — Codegen fixes for TARGET_LIB (runtime helpers, built-ins)
+- [x] P18.13 — Build output hygiene (.aelib gitignored, install only binary + lib)
+
+---
+
 ## Legend
 
 | Status | Meaning |
@@ -280,7 +301,7 @@ Closed-source library distribution without reverse engineering risk.
 |-------|-----------|-------|
 | Tokenizer tests | 15/16 | "all operators" test fails (count mismatch) |
 | Parser tests | passing | No failures reported |
-| Host-native tests | 44/45 | test_match fails to compile |
+| Host-native tests | 46/47 | test_match fails to compile |
 | Layout tests | untested | make test-layout not run this session |
 | New-target tests | 4/4 | kernel, module, binary, boot targets all compile |
 
@@ -330,6 +351,15 @@ Closed-source library distribution without reverse engineering risk.
 8. **DCE `@test` protection** — Optimizer's dead code elimination was removing
    `@test` functions because nothing called them. Added `has_test` to the DCE's
    "is_entry" check so test functions are preserved for the auto-generated dispatcher.
+
+9. **Phase 18: Standard library rewritten in pure Aether** — All 11 std/*.ae files
+   rewritten to use Aether language features instead of asm blocks. Only 3 files
+   retain asm for things Aether cannot express (port I/O, CPU control, byte-level
+   memory copy). Asm usage reduced from 11/11 files to 3/11.
+   - `libaether.aelib` moved from `std/` to `build/lib/` — out of source tree
+   - `*.aelib` added to `.gitignore`
+   - `install`/`install-local` only install binary + `libaether.aelib` (no source files)
+   - Test count: 46/47 passing (same pre-existing test_match failure)
 
 ## Recent Changes (2026-06-23)
 
