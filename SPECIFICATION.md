@@ -108,14 +108,12 @@ aether run hello.ae
 
 ### 3.1 Comments
 
-> **🔧 SPEC MISMATCH**: The spec documents `//` and `/* */` comment syntax. The actual implementation uses `#` for line comments and `#{ }#` for nestable block comments. This section has been corrected to match the implementation.
-
 ```aether
-# Line comment
+// Line comment
 
-#{ Block comment }#
+/* Block comment */
 
-#{ Nested #{ block }# comments }#
+/* Nested /* block */ comments */
 ```
 
 ### 3.2 Identifiers
@@ -159,6 +157,7 @@ Member:         .   ->
 Scope:          ::
 Arrow:          ->
 Range:          ..  ..=
+Array length:   #   (prefix operator, e.g. #arrayName)
 Pattern:        |   ..=
 ```
 

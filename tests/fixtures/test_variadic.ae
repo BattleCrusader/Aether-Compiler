@@ -1,0 +1,12 @@
+// test_variadic.ae — test variadic function syntax
+func sum(values: ...u64): u64 {
+    let mut total = 0
+    for i in 0..5 {
+        total = total + i
+    }
+    return total
+}
+
+func main(): u64 {
+    return sum(1, 2, 3, 4, 5)
+}

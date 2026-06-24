@@ -1,5 +1,5 @@
-# std/math.ae — Basic math: absoluteValue, min, max, clamp
-# Pure Aether — no asm blocks needed for simple arithmetic.
+// std/math.ae — Basic math: absoluteValue, min, max, clamp, and more
+// Pure Aether — no asm blocks needed for simple arithmetic.
 
 pub func absoluteValue(value: int): int {
     if value < 0 { return -value }
@@ -67,4 +67,50 @@ pub func leastCommonMultiple(a: u64, b: u64): u64 {
     if a == 0 or b == 0 { return 0 }
     let gcd: u64 = greatestCommonDivisor(a, b)
     return (a / gcd) * b
+}
+
+// --- New functions ---
+
+pub func factorial(value: u64): u64 {
+    if value <= 1 { return 1 }
+    let mut result: u64 = 1
+    let mut i: u64 = 2
+    while i <= value {
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+pub func fibonacci(value: u64): u64 {
+    if value == 0 { return 0 }
+    if value == 1 { return 1 }
+    let mut a: u64 = 0
+    let mut b: u64 = 1
+    let mut i: u64 = 2
+    while i <= value {
+        let next: u64 = a + b
+        a = b
+        b = next
+        i = i + 1
+    }
+    return b
+}
+
+pub func isEven(value: u64): bool {
+    return value % 2 == 0
+}
+
+pub func isOdd(value: u64): bool {
+    return value % 2 == 1
+}
+
+pub func lerp(startValue: int, endValue: int, factor: int): int {
+    return startValue + (endValue - startValue) * factor
+}
+
+pub func mapRange(value: int, inputStart: int, inputEnd: int, outputStart: int, outputEnd: int): int {
+    if inputEnd == inputStart { return outputStart }
+    let mapped: int = (value - inputStart) * (outputEnd - outputStart) / (inputEnd - inputStart) + outputStart
+    return mapped
 }

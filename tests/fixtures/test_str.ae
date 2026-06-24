@@ -1,23 +1,26 @@
-# test_str.ae — comprehensive tests for std/str.ae
-# Tests: concat, strlen, strcmp, strEq, split, trim, toUpper, toLower,
-#        substring, startsWith, endsWith, contains, replace, join
+// test_str.ae — comprehensive tests for std/str.ae
+// Tests: concat, strlen, strcmp, strEq, split, trim, toUpper, toLower,
+//        substring, startsWith, endsWith, contains, replace, join,
+//        reverse, repeat, count, indexOf, lastIndexOf, padLeft, padRight,
+//        isAlpha, isDigit, isAlnum, isSpace
 
 import "std/test"
+import "std/str"
 
 @test
 func main() {
-    # concat
+    // concat
     assertEquals(concat("hello", "world"), "helloworld", "concat basic")
     assertEquals(concat("", "test"), "test", "concat empty first")
     assertEquals(concat("test", ""), "test", "concat empty second")
 
-    # strlen
+    // strlen
     assertEquals(strlen("hello"), 5, "strlen basic")
     assertEquals(strlen(""), 0, "strlen empty")
     assertEquals(strlen("a"), 1, "strlen single")
     assertEquals(strlen("hello world"), 11, "strlen with space")
 
-    # strcmp / strEq
+    // strcmp / strEq
     assertTrue(strcmp("abc", "abc"), "strcmp equal")
     assertTrue(!strcmp("abc", "def"), "strcmp not equal")
     assertTrue(strcmp("", ""), "strcmp both empty")
@@ -25,7 +28,7 @@ func main() {
     assertTrue(!strEq("hello", "world"), "strEq not equal")
     assertTrue(strEq("", ""), "strEq both empty")
 
-    # split
+    // split
     let parts1: [string] = split("a,b,c", ",")
     assertEquals(#parts1, 3, "split count 3")
     assertEquals(parts1[0], "a", "split part 0")
@@ -46,7 +49,7 @@ func main() {
     assertEquals(parts4[1], "", "split empty middle 1")
     assertEquals(parts4[2], "b", "split empty middle 2")
 
-    # trim
+    // trim
     assertEquals(trim("  hello  "), "hello", "trim both sides")
     assertEquals(trim("hello"), "hello", "trim no whitespace")
     assertEquals(trim("  "), "", "trim all whitespace")
@@ -54,55 +57,55 @@ func main() {
     assertEquals(trim("  hello world  "), "hello world", "trim with internal space")
     assertEquals(trim("\thello\n"), "hello", "trim tab and newline")
 
-    # toUpper
+    // toUpper
     assertEquals(toUpper("hello"), "HELLO", "toUpper basic")
     assertEquals(toUpper("Hello World"), "HELLO WORLD", "toUpper mixed")
     assertEquals(toUpper(""), "", "toUpper empty")
     assertEquals(toUpper("123"), "123", "toUpper numbers")
     assertEquals(toUpper("HELLO"), "HELLO", "toUpper already upper")
 
-    # toLower
+    // toLower
     assertEquals(toLower("HELLO"), "hello", "toLower basic")
     assertEquals(toLower("Hello World"), "hello world", "toLower mixed")
     assertEquals(toLower(""), "", "toLower empty")
     assertEquals(toLower("123"), "123", "toLower numbers")
     assertEquals(toLower("hello"), "hello", "toLower already lower")
 
-    # substring
+    // substring
     assertEquals(substring("hello", 0, 5), "hello", "substring full")
     assertEquals(substring("hello", 1, 4), "ell", "substring middle")
     assertEquals(substring("hello", 0, 0), "", "substring empty")
     assertEquals(substring("hello", 2, 5), "llo", "substring end")
 
-    # startsWith
+    // startsWith
     assertTrue(startsWith("hello", "he"), "startsWith true")
     assertTrue(!startsWith("hello", "el"), "startsWith false")
     assertTrue(startsWith("hello", ""), "startsWith empty prefix")
     assertTrue(startsWith("hello", "hello"), "startsWith full string")
     assertTrue(!startsWith("hello", "hello!"), "startsWith longer prefix")
 
-    # endsWith
+    // endsWith
     assertTrue(endsWith("hello", "lo"), "endsWith true")
     assertTrue(!endsWith("hello", "el"), "endsWith false")
     assertTrue(endsWith("hello", ""), "endsWith empty suffix")
     assertTrue(endsWith("hello", "hello"), "endsWith full string")
     assertTrue(!endsWith("hello", "!hello"), "endsWith longer suffix")
 
-    # contains
+    // contains
     assertTrue(contains("hello world", "world"), "contains true")
     assertTrue(!contains("hello world", "xyz"), "contains false")
     assertTrue(contains("hello", ""), "contains empty needle")
     assertTrue(contains("hello", "hello"), "contains full string")
     assertTrue(contains("aaa", "aa"), "contains overlapping")
 
-    # replace
+    // replace
     assertEquals(replace("hello world", "world", "there"), "hello there", "replace basic")
     assertEquals(replace("hello", "x", "y"), "hello", "replace not found")
     assertEquals(replace("hello", "", "x"), "hello", "replace empty search")
     assertEquals(replace("abab", "a", "c"), "cbcb", "replace multiple")
     assertEquals(replace("hello", "hello", "hi"), "hi", "replace full string")
 
-    # join
+    // join
     let arr1: [string] = ["a", "b", "c"]
     assertEquals(join(arr1, ","), "a,b,c", "join basic")
     let arr2: [string] = ["hello"]
@@ -111,4 +114,92 @@ func main() {
     assertEquals(join(arr3, ","), "", "join empty")
     let arr4: [string] = ["a", "b", "c"]
     assertEquals(join(arr4, ""), "abc", "join empty delimiter")
+
+    // --- New functions ---
+
+    // reverse
+    assertEquals(reverse("hello"), "olleh", "reverse basic")
+    assertEquals(reverse(""), "", "reverse empty")
+    assertEquals(reverse("a"), "a", "reverse single")
+    assertEquals(reverse("ab"), "ba", "reverse two chars")
+    assertEquals(reverse("racecar"), "racecar", "reverse palindrome")
+
+    // repeat
+    assertEquals(repeat("ab", 3), "ababab", "repeat basic")
+    assertEquals(repeat("", 5), "", "repeat empty string")
+    assertEquals(repeat("x", 0), "", "repeat zero times")
+    assertEquals(repeat("x", 1), "x", "repeat once")
+    assertEquals(repeat("hello", 2), "hellohello", "repeat word")
+
+    // count
+    assertEquals(count("hello", "l"), 2, "count basic")
+    assertEquals(count("hello", "ll"), 1, "count double char")
+    assertEquals(count("hello", "x"), 0, "count not found")
+    assertEquals(count("", "a"), 0, "count empty haystack")
+    assertEquals(count("aaaa", "aa"), 2, "count non-overlapping")
+    assertEquals(count("hello", ""), 0, "count empty needle")
+
+    // indexOf
+    assertEquals(indexOf("hello", "ll"), 2, "indexOf basic")
+    assertEquals(indexOf("hello", "x"), -1, "indexOf not found")
+    assertEquals(indexOf("hello", "hello"), 0, "indexOf full string")
+    assertEquals(indexOf("hello", ""), -1, "indexOf empty needle")
+    assertEquals(indexOf("hello", "h"), 0, "indexOf first char")
+    assertEquals(indexOf("hello", "o"), 4, "indexOf last char")
+
+    // lastIndexOf
+    assertEquals(lastIndexOf("hello", "l"), 3, "lastIndexOf basic")
+    assertEquals(lastIndexOf("hello", "x"), -1, "lastIndexOf not found")
+    assertEquals(lastIndexOf("hello", "hello"), 0, "lastIndexOf full string")
+    assertEquals(lastIndexOf("hello", ""), -1, "lastIndexOf empty needle")
+    assertEquals(lastIndexOf("hello", "h"), 0, "lastIndexOf first char")
+    assertEquals(lastIndexOf("hello", "o"), 4, "lastIndexOf last char")
+    assertEquals(lastIndexOf("ababa", "aba"), 2, "lastIndexOf overlapping")
+
+    // padLeft
+    assertEquals(padLeft("hello", 8, 32), "   hello", "padLeft basic")
+    assertEquals(padLeft("hello", 5, 32), "hello", "padLeft same length")
+    assertEquals(padLeft("hello", 3, 32), "hello", "padLeft shorter")
+    assertEquals(padLeft("", 3, 48), "000", "padLeft empty string")
+    assertEquals(padLeft("a", 1, 32), "a", "padLeft single char same")
+
+    // padRight
+    assertEquals(padRight("hello", 8, 32), "hello   ", "padRight basic")
+    assertEquals(padRight("hello", 5, 32), "hello", "padRight same length")
+    assertEquals(padRight("hello", 3, 32), "hello", "padRight shorter")
+    assertEquals(padRight("", 3, 48), "000", "padRight empty string")
+    assertEquals(padRight("a", 1, 32), "a", "padRight single char same")
+
+    // isAlpha
+    assertTrue(isAlpha(65), "isAlpha A")
+    assertTrue(isAlpha(90), "isAlpha Z")
+    assertTrue(isAlpha(97), "isAlpha a")
+    assertTrue(isAlpha(122), "isAlpha z")
+    assertTrue(!isAlpha(48), "isAlpha 0 false")
+    assertTrue(!isAlpha(32), "isAlpha space false")
+    assertTrue(!isAlpha(0), "isAlpha null false")
+
+    // isDigit
+    assertTrue(isDigit(48), "isDigit 0")
+    assertTrue(isDigit(57), "isDigit 9")
+    assertTrue(!isDigit(65), "isDigit A false")
+    assertTrue(!isDigit(32), "isDigit space false")
+    assertTrue(!isDigit(0), "isDigit null false")
+
+    // isAlnum
+    assertTrue(isAlnum(65), "isAlnum A")
+    assertTrue(isAlnum(97), "isAlnum a")
+    assertTrue(isAlnum(48), "isAlnum 0")
+    assertTrue(!isAlnum(32), "isAlnum space false")
+    assertTrue(!isAlnum(0), "isAlnum null false")
+    assertTrue(!isAlnum(64), "isAlnum @ false")
+
+    // isSpace
+    assertTrue(isSpace(32), "isSpace space")
+    assertTrue(isSpace(9), "isSpace tab")
+    assertTrue(isSpace(10), "isSpace newline")
+    assertTrue(isSpace(13), "isSpace carriage return")
+    assertTrue(!isSpace(65), "isSpace A false")
+    assertTrue(!isSpace(48), "isSpace 0 false")
+    assertTrue(!isSpace(0), "isSpace null false")
 }

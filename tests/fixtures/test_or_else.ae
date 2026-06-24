@@ -1,0 +1,6 @@
+// test_or_else.ae — test `or` optional unwrap operator
+func main(): u64 {
+    let x: u64? = none
+    let val = x or 42
+    return val
+}

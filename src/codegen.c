@@ -257,6 +257,18 @@ static char *decl_name(AstNode *node) {
                 return result ? result : strdup("");
             }
             break;
+        case NODE_TYPE_ALIAS:
+            /* Type alias: name is first item in list */
+            if (node->data.list.count > 0 && node->data.list.items[0]->type == NODE_IDENT) {
+                StringView *sv = &node->data.list.items[0]->data.ident.name;
+                char *result = (char *)malloc(sv->len + 1);
+                if (result) {
+                    memcpy(result, sv->data, sv->len);
+                    result[sv->len] = '\0';
+                }
+                return result ? result : strdup("");
+            }
+            break;
         default:
             break;
     }
@@ -277,6 +289,8 @@ static bool decl_is_pub(AstNode *node) {
             return node->data.enum_decl.is_pub;
         case NODE_CONST_DECL:
             return node->data.let_decl.is_mut; /* const is always accessible */
+        case NODE_TYPE_ALIAS:
+            return true; /* type aliases are always accessible */
         default:
             return false;
     }
@@ -1076,7 +1090,39 @@ static void frame_collect(Arena *a, AstNode *node, VarSlot **list, int *offset) 
             break;
 
         case NODE_FOR:
-            frame_collect(a, node->data.for_node.var, list, offset);
+            /* Create a stack slot for the loop variable (it's an ident, not a let) */
+            if (node->data.for_node.var && node->data.for_node.var->type == NODE_IDENT) {
+                *offset += 8;
+                VarSlot *slot = (VarSlot *)arena_alloc(a, sizeof(VarSlot));
+                slot->node = node->data.for_node.var;
+                slot->name = arena_strndup(a,
+                    node->data.for_node.var->data.ident.name.data,
+                    node->data.for_node.var->data.ident.name.len);
+                slot->stack_offset = -(*offset);
+                slot->size = 8;
+                slot->actual_size = 8;
+                slot->prim = PRIM_U64;
+                slot->next = *list;
+                *list = slot;
+            }
+            /* Also create a slot for the index variable if present */
+            if (node->data.for_node.index_var) {
+                AstNode *index_var = node->data.for_node.index_var;
+                if (index_var && index_var->type == NODE_IDENT) {
+                    *offset += 8;
+                    VarSlot *slot = (VarSlot *)arena_alloc(a, sizeof(VarSlot));
+                    slot->node = index_var;
+                    slot->name = arena_strndup(a,
+                        index_var->data.ident.name.data,
+                        index_var->data.ident.name.len);
+                    slot->stack_offset = -(*offset);
+                    slot->size = 8;
+                    slot->actual_size = 8;
+                    slot->prim = PRIM_U64;
+                    slot->next = *list;
+                    *list = slot;
+                }
+            }
             frame_collect(a, node->data.for_node.iterable, list, offset);
             frame_collect(a, node->data.for_node.body, list, offset);
             break;
@@ -1345,8 +1391,63 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_ARRAY_LIT: {
-            cg_warn(cg, node, "array literal not yet implemented");
-            cg_inst1(cg, "xor", "rax, rax");
+            /* Array literal: [1, 2, 3]
+               Layout on stack: [8 bytes: count][elem0][elem1]...[elemN]
+               Returns pointer to the array (address of count field) in rax. */
+            int count = node->data.array_lit.elements.count;
+            if (count == 0) {
+                cg_inst1(cg, "xor", "rax, rax");
+                break;
+            }
+
+            /* Determine element size from first element's type */
+            int elem_size = 8; /* default */
+            if (count > 0) {
+                AstNode *first = node->data.array_lit.elements.items[0];
+                /* Try to infer element size from the expression type */
+                if (first->type == NODE_LITERAL_INT) elem_size = 8;
+                else if (first->type == NODE_LITERAL_BOOL) elem_size = 1;
+                else if (first->type == NODE_LITERAL_CHAR) elem_size = 4;
+                else if (first->type == NODE_LITERAL_FLOAT) elem_size = 8;
+            }
+
+            /* Total size: 8 bytes for count + count * elem_size, rounded up to 16 */
+            int total_size = 8 + count * elem_size;
+            int aligned_size = ((total_size + 15) / 16) * 16;
+
+            /* Allocate stack space: sub rsp, aligned_size */
+            char buf[64];
+            snprintf(buf, sizeof(buf), "sub rsp, %d", aligned_size);
+            cg_inst(cg, buf);
+
+            /* Store count header at [rsp] */
+            snprintf(buf, sizeof(buf), "mov qword [rsp], %d", count);
+            cg_inst(cg, buf);
+
+            /* Evaluate each element and store it */
+            int offset = 8; /* start after count header */
+            for (int i = 0; i < count; i++) {
+                cg_expr(cg, node->data.array_lit.elements.items[i], slots);
+                switch (elem_size) {
+                    case 1:
+                        snprintf(buf, sizeof(buf), "mov byte [rsp+%d], al", offset);
+                        break;
+                    case 2:
+                        snprintf(buf, sizeof(buf), "mov word [rsp+%d], ax", offset);
+                        break;
+                    case 4:
+                        snprintf(buf, sizeof(buf), "mov dword [rsp+%d], eax", offset);
+                        break;
+                    default:
+                        snprintf(buf, sizeof(buf), "mov qword [rsp+%d], rax", offset);
+                        break;
+                }
+                cg_inst(cg, buf);
+                offset += elem_size;
+            }
+
+            /* Return array pointer in rax */
+            cg_inst1(cg, "mov", "rax, rsp");
             break;
         }
 
@@ -1485,6 +1586,20 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     break;
                 }
                 case BIN_RANGE: cg_comment(cg, "range"); cg_inst1(cg, "mov", "rax, rcx"); break;
+                case BIN_OR_ELSE: {
+                    /* x or default: if x is none (0), use default */
+                    cg_comment(cg, "optional unwrap (or)");
+                    int lbl_has_val = cg_new_label(cg);
+                    char lbl[32];
+                    cg_inst1(cg, "test", "rax, rax");
+                    snprintf(lbl, sizeof(lbl), "jnz L_or_else_has_%d", lbl_has_val);
+                    cg_inst(cg, lbl);
+                    /* rax is 0 (none), use default (rcx) */
+                    cg_inst1(cg, "mov", "rax, rcx");
+                    snprintf(lbl, sizeof(lbl), "L_or_else_has_%d:", lbl_has_val);
+                    cg_write_fmt(cg, "%s\n", lbl);
+                    break;
+                }
                 case BIN_CONCAT: {
                     cg_comment(cg, "string concat");
                     /* rax = left, rcx = right */
@@ -1567,6 +1682,14 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_inst1(cg, "pop", "rcx");
                     cg_inst(cg, "mov [rax], rcx");
                     /* rax now holds the heap pointer */
+                    break;
+                }
+                case UNARY_ARRAY_LEN: {
+                    /* #expr — array length: read 8-byte length from array header */
+                    cg_comment(cg, "array length");
+                    /* expr is already in rax (the array pointer) */
+                    /* Array layout: [length: u64][data...] */
+                    cg_inst(cg, "mov rax, [rax]");
                     break;
                 }
                 default: break;
@@ -1794,6 +1917,27 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
                     cg_inst(cg, tmp);
                     cg_write_fmt(cg, "    jne L_%x\n", next_label);
+                } else if (pat->type == NODE_BINARY_OP &&
+                           (pat->data.binary.op == BIN_RANGE || pat->data.binary.op == BIN_RANGE_INCLUSIVE)) {
+                    /* Range pattern: case 1..9 or case 1..=9 */
+                    bool inclusive = (pat->data.binary.op == BIN_RANGE_INCLUSIVE);
+                    /* Compare rax with start */
+                    cg_expr(cg, pat->data.binary.left, slots);
+                    cg_inst1(cg, "push", "rax");  /* save start */
+                    cg_inst1(cg, "mov", "rax, [rsp+8]");  /* reload matched value */
+                    cg_inst1(cg, "pop", "rcx");   /* rcx = start */
+                    cg_inst1(cg, "cmp", "rax, rcx");
+                    cg_write_fmt(cg, "    jl L_%x\n", next_label);  /* if rax < start, skip */
+                    /* Compare rax with end */
+                    cg_expr(cg, pat->data.binary.right, slots);
+                    cg_inst1(cg, "mov", "rcx, rax");  /* rcx = end */
+                    cg_inst1(cg, "mov", "rax, [rsp]");  /* reload matched value */
+                    cg_inst1(cg, "cmp", "rax, rcx");
+                    if (inclusive) {
+                        cg_write_fmt(cg, "    jg L_%x\n", next_label);  /* if rax > end, skip */
+                    } else {
+                        cg_write_fmt(cg, "    jge L_%x\n", next_label);  /* if rax >= end, skip */
+                    }
                 }
 
                 if (!is_wildcard) {
@@ -1983,16 +2127,21 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_FOR: {
-            /* Basic: for var in start..end { body } */
+            /* Basic: for var in start..end { body }
+               Extended: for i, val in arr { body } */
             int start_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
 
+            /* Check if we have an index variable */
+            AstNode *index_var = node->data.for_node.index_var;
+
             /* If for has iterable, evaluate it */
             if (node->data.for_node.iterable) {
-                /* Range literal: we need separate start and end */
                 cg_comment(cg, "for loop");
                 /* Iterable is BIN_RANGE: left=start, right=end */
-                if (node->data.for_node.iterable->type == NODE_BINARY_OP) {
+                if (node->data.for_node.iterable->type == NODE_BINARY_OP &&
+                    (node->data.for_node.iterable->data.binary.op == BIN_RANGE ||
+                     node->data.for_node.iterable->data.binary.op == BIN_RANGE_INCLUSIVE)) {
                     AstNode *range = node->data.for_node.iterable;
                     /* Emit start value to rcx for loop counter */
                     cg_expr(cg, range->data.binary.left, slots);
@@ -2004,10 +2153,25 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_inst1(cg, "cmp", "rcx, rax");
                     cg_write_fmt(cg, "    jge L_%x\n", end_label);
 
+                    /* Store counter to index variable if present */
+                    if (index_var) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                index_var->data.ident.name.data,
+                                index_var->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rcx", off);
+                        cg_inst(cg, buf);
+                    }
+
                     /* If there's a loop variable, store counter to it */
                     if (node->data.for_node.var) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                node->data.for_node.var->data.ident.name.data,
+                                node->data.for_node.var->data.ident.name.len));
                         char buf[64];
-                        snprintf(buf, sizeof(buf), "mov [rbp-8], rcx"); /* placeholder */
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rcx", off);
                         cg_inst(cg, buf);
                     }
 
@@ -2019,6 +2183,59 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_inst1(cg, "inc", "rcx");
                     cg_write_fmt(cg, "    jmp L_%x\n", start_label);
                     cg_write_fmt(cg, "L_%x:\n", end_label);
+                } else {
+                    /* Array iteration: for i, val in arr { body }
+                       Evaluate iterable to get array pointer */
+                    cg_expr(cg, node->data.for_node.iterable, slots);
+                    cg_inst1(cg, "push", "rax");  /* save array pointer */
+
+                    /* Load array count from header */
+                    cg_inst(cg, "mov rax, [rsp]");
+                    cg_inst(cg, "mov rcx, [rax]");  /* rcx = count */
+                    cg_inst1(cg, "push", "rcx");     /* save count */
+
+                    /* Initialize index to 0 */
+                    cg_inst1(cg, "xor", "rcx, rcx");  /* rcx = index */
+
+                    cg_write_fmt(cg, "L_%x:\n", start_label);
+                    /* Compare index with count */
+                    cg_inst1(cg, "cmp", "rcx, [rsp]");
+                    cg_write_fmt(cg, "    jge L_%x\n", end_label);
+
+                    /* Store index to index_var if present */
+                    if (index_var) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                index_var->data.ident.name.data,
+                                index_var->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rcx", off);
+                        cg_inst(cg, buf);
+                    }
+
+                    /* Load element value: array_ptr + 8 + index * 8 */
+                    if (node->data.for_node.var) {
+                        cg_inst(cg, "mov rax, [rsp+8]");  /* array pointer */
+                        cg_inst(cg, "lea rax, [rax+rcx*8+8]");  /* element address */
+                        cg_inst(cg, "mov rax, [rax]");  /* load element value */
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                node->data.for_node.var->data.ident.name.data,
+                                node->data.for_node.var->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
+
+                    /* Body */
+                    if (node->data.for_node.body)
+                        cg_stmt(cg, node->data.for_node.body, slots);
+
+                    /* Increment index */
+                    cg_inst1(cg, "inc", "rcx");
+                    cg_write_fmt(cg, "    jmp L_%x\n", start_label);
+                    cg_write_fmt(cg, "L_%x:\n", end_label);
+                    cg_inst(cg, "add rsp, 16");  /* pop count and array pointer */
                 }
             }
             break;
@@ -2299,12 +2516,14 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_UNSAFE: {
-            /* unsafe { body } — just emit the body, no special handling needed */
+            /* unsafe { body } — emit body with unsafe comment marker */
+            cg_comment(cg, "unsafe block begin");
             if (node->data.list.count > 0) {
                 for (int i = 0; i < node->data.list.count; i++) {
                     cg_stmt(cg, node->data.list.items[i], slots);
                 }
             }
+            cg_comment(cg, "unsafe block end");
             break;
         }
 
@@ -2327,10 +2546,10 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                             if ((p - s) >= 6 && strncmp(s, "extern", 6) == 0) {
                                 /* skip — already emitted at top */
                             } else {
-                                /* Strip Aether comments (#) from asm block output */
+                                /* Strip Aether comments (//) from asm block output */
                                 const char *s_trim = line_start;
                                 while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
-                                if (s_trim < p && *s_trim == '#') {
+                                if (s_trim + 1 < p && s_trim[0] == '/' && s_trim[1] == '/') {
                                     /* Skip this line entirely — it's an Aether comment */
                                 } else {
                                     /* Process line: substitute [varName] with [rbp+offset] */
@@ -2952,10 +3171,10 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                         const char *line_start = p;
                         while (p < end && *p != '\n') p++;
                         if (p > line_start) {
-                            /* Strip Aether comments (#) from asm block output */
+                            /* Strip Aether comments (//) from asm block output */
                             const char *s_trim = line_start;
                             while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
-                            if (s_trim < p && *s_trim == '#') {
+                            if (s_trim + 1 < p && s_trim[0] == '/' && s_trim[1] == '/') {
                                 /* Skip this line entirely — it's an Aether comment */
                             } else {
                                 cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);

@@ -1,0 +1,7 @@
+// test_array_literal.ae — test array literal codegen
+func main(): u64 {
+    let arr = [10, 20, 30]
+    // arr[0] should be 10
+    let val = arr[0]
+    return val
+}

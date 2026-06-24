@@ -1,0 +1,7 @@
+// test_type_alias.ae — test type alias parsing
+type MyInt = u64
+
+func main(): MyInt {
+    let x: MyInt = 42
+    return x
+}

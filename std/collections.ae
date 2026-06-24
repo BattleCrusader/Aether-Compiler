@@ -1,5 +1,5 @@
-# std/collections.ae — Simple collections: Array, List
-# Pure Aether structs.
+// std/collections.ae — Simple collections: Array, List, HashMap, Set, Queue, Stack, Deque
+// Pure Aether structs.
 
 struct Array {
     data: u64
@@ -29,6 +29,20 @@ struct Set {
 }
 
 struct Queue {
+    data: [u64]
+    front: u64
+    back: u64
+    count: u64
+    capacity: u64
+}
+
+struct Stack {
+    data: [u64]
+    count: u64
+    capacity: u64
+}
+
+struct Deque {
     data: [u64]
     front: u64
     back: u64
@@ -235,5 +249,99 @@ func queueIsEmpty(self: ref Queue): bool {
 }
 
 func queueLen(self: ref Queue): u64 {
+    return self.count
+}
+
+// --- Stack (LIFO) ---
+
+func newStack(capacity: u64): Stack {
+    let mut result: Stack
+    result.data = []
+    result.count = 0
+    result.capacity = capacity
+    let mut i: u64 = 0
+    while i < capacity {
+        result.data = result.data + [0]
+        i = i + 1
+    }
+    return result
+}
+
+func stackPush(self: ref Stack, value: u64) {
+    if self.count >= self.capacity { return }
+    self.data[self.count] = value
+    self.count = self.count + 1
+}
+
+func stackPop(self: ref Stack): u64 {
+    if self.count == 0 { return 0 }
+    self.count = self.count - 1
+    return self.data[self.count]
+}
+
+func stackPeek(self: ref Stack): u64 {
+    if self.count == 0 { return 0 }
+    return self.data[self.count - 1]
+}
+
+func stackIsEmpty(self: ref Stack): bool {
+    return self.count == 0
+}
+
+func stackLen(self: ref Stack): u64 {
+    return self.count
+}
+
+// --- Deque (double-ended queue) ---
+
+func newDeque(capacity: u64): Deque {
+    let mut result: Deque
+    result.data = []
+    result.front = 0
+    result.back = 0
+    result.count = 0
+    result.capacity = capacity
+    let mut i: u64 = 0
+    while i < capacity {
+        result.data = result.data + [0]
+        i = i + 1
+    }
+    return result
+}
+
+func dequePushFront(self: ref Deque, value: u64) {
+    if self.count >= self.capacity { return }
+    self.front = (self.front + self.capacity - 1) % self.capacity
+    self.data[self.front] = value
+    self.count = self.count + 1
+}
+
+func dequePushBack(self: ref Deque, value: u64) {
+    if self.count >= self.capacity { return }
+    self.data[self.back] = value
+    self.back = (self.back + 1) % self.capacity
+    self.count = self.count + 1
+}
+
+func dequePopFront(self: ref Deque): u64 {
+    if self.count == 0 { return 0 }
+    let value: u64 = self.data[self.front]
+    self.front = (self.front + 1) % self.capacity
+    self.count = self.count - 1
+    return value
+}
+
+func dequePopBack(self: ref Deque): u64 {
+    if self.count == 0 { return 0 }
+    self.back = (self.back + self.capacity - 1) % self.capacity
+    self.count = self.count - 1
+    return self.data[self.back]
+}
+
+func dequeIsEmpty(self: ref Deque): bool {
+    return self.count == 0
+}
+
+func dequeLen(self: ref Deque): u64 {
     return self.count
 }

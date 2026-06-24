@@ -109,6 +109,7 @@ typedef enum {
     BIN_MUL_ASSIGN, BIN_DIV_ASSIGN,
     BIN_RANGE, BIN_RANGE_INCLUSIVE,
     BIN_CONCAT,  /* string concatenation */
+    BIN_OR_ELSE, /* optional unwrap: x or default */
 } BinOp;
 
 /* ================================================================
@@ -119,7 +120,7 @@ typedef enum {
     UNARY_NEG, UNARY_NOT, UNARY_BIT_NOT,
     UNARY_REF, UNARY_DEREF, UNARY_ADDR,
     UNARY_OWNED, UNARY_MUT, UNARY_HEAP,
-    UNARY_INC, UNARY_DEC,
+    UNARY_INC, UNARY_DEC, UNARY_ARRAY_LEN,
 } UnaryOp;
 
 /* ================================================================
@@ -229,6 +230,7 @@ typedef struct {
     AstNode *var;           /* loop variable */
     AstNode *iterable;      /* range or collection */
     AstNode *body;
+    AstNode *index_var;     /* index variable for for i, val in arr (NULL if not present) */
 } ForNode;
 
 /* Match */

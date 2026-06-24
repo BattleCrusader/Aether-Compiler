@@ -110,6 +110,7 @@ static const TokenType STMT_START[] = {
     TOKEN_KW_CONST, TOKEN_KW_IMPORT, TOKEN_KW_MODULE,
     TOKEN_KW_PUB, TOKEN_KW_STATIC,
     TOKEN_KW_UNSAFE, TOKEN_KW_TRY, TOKEN_KW_THROW,
+    TOKEN_KW_TYPE,
     TOKEN_AT,
     TOKEN_RBRACE, /* closing brace can follow statements */
 };
@@ -419,6 +420,24 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
         } else {
             parser_error(p, p->current, "expected protocol name");
         }
+    } else if (parser_match(p, TOKEN_KW_TYPE)) {
+        /* type Name = ExistingType */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token name_tok = p->current; parser_advance(p);
+            AstNode *alias = node_create(p->arena, NODE_TYPE_ALIAS, name_tok.loc);
+            /* Store name as first item in list, underlying type as second */
+            AstNode *name_node = node_ident(p->arena, name_tok.loc, name_tok.text);
+            node_list_append(&alias->data.list, name_node);
+            if (parser_match(p, TOKEN_EQ)) {
+                AstNode *underlying = parse_type(p);
+                if (underlying) {
+                    node_list_append(&alias->data.list, underlying);
+                }
+            }
+            node_list_append(decls, alias);
+        } else {
+            parser_error(p, p->current, "expected type alias name");
+        }
     } else if (parser_match(p, TOKEN_KW_IMPL)) {
         /* impl Trait for Type { methods } */
         if (parser_check(p, TOKEN_IDENT)) {
@@ -579,10 +598,12 @@ AstNodeList parse_params(Parser *p) {
 
     while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
         bool is_mut = parser_match(p, TOKEN_KW_MUT);
-        bool is_varargs = parser_match(p, TOKEN_PIPE_PIPE); /* || means varargs? */
-        /* Actually varargs syntax is '...' or use '...int' style */
+        bool is_varargs = false;
+        /* Variadic: ... before param name or ... before type */
         if (parser_match(p, TOKEN_DOT_DOT)) {
             is_varargs = true;
+            /* Consume the third dot if present: ...name */
+            parser_match(p, TOKEN_DOT);
         }
 
         /* Allow both TOKEN_IDENT and TOKEN_KW_SELF as param names */
@@ -594,12 +615,25 @@ AstNodeList parse_params(Parser *p) {
 
         AstNode *type = NULL;
         if (parser_match(p, TOKEN_COLON)) {
+            /* Check for ...Type syntax after colon (variadic) */
+            if (parser_match(p, TOKEN_DOT_DOT)) {
+                is_varargs = true;
+                /* Consume the third dot if present: ...Type */
+                parser_match(p, TOKEN_DOT);
+            }
             type = parse_type(p);
+        }
+
+        /* Default parameter value: param: Type = expr */
+        AstNode *default_value = NULL;
+        if (parser_match(p, TOKEN_EQ)) {
+            default_value = parse_expr(p);
         }
 
         AstNode *param = node_param(p->arena, name_tok.loc,
             node_ident(p->arena, name_tok.loc, name_tok.text),
             type, is_mut, is_varargs);
+        param->data.param.default_value = default_value;
 
         node_list_append(&params, param);
 
@@ -837,9 +871,18 @@ AstNode *parse_statement(Parser *p) {
     /* for loop */
     if (parser_match(p, TOKEN_KW_FOR)) {
         AstNode *var = NULL;
+        AstNode *index_var = NULL;
         if (parser_check(p, TOKEN_IDENT)) {
             Token v = p->current; parser_advance(p);
             var = node_ident(p->arena, v.loc, v.text);
+            /* Check for index+value: for i, val in arr */
+            if (parser_match(p, TOKEN_COMMA)) {
+                if (parser_check(p, TOKEN_IDENT)) {
+                    Token v2 = p->current; parser_advance(p);
+                    index_var = var; /* first ident is the index */
+                    var = node_ident(p->arena, v2.loc, v2.text);
+                }
+            }
         }
 
         AstNode *iterable = NULL;
@@ -853,7 +896,12 @@ AstNode *parse_statement(Parser *p) {
             body = parse_block_braced(p);
         }
 
-        return node_for(p->arena, p->previous.loc, var, iterable, body);
+        AstNode *for_node = node_for(p->arena, p->previous.loc, var, iterable, body);
+        /* Store index_var in the for_node */
+        if (index_var) {
+            for_node->data.for_node.index_var = index_var;
+        }
+        return for_node;
     }
 
     /* return */
@@ -1006,7 +1054,12 @@ AstNode *parse_statement(Parser *p) {
 
     /* unsafe block */
     if (parser_match(p, TOKEN_KW_UNSAFE)) {
-        AstNode *body = parse_statement(p);
+        AstNode *body = NULL;
+        if (parser_match(p, TOKEN_LBRACE)) {
+            body = parse_block_braced(p);
+        } else {
+            body = parse_statement(p);
+        }
         if (body) {
             AstNode *unsafe_node = node_create(p->arena, NODE_UNSAFE, body->loc);
             /* Wrap the body in the unsafe node's list */
@@ -1154,6 +1207,20 @@ AstNode *parse_pattern(Parser *p) {
 
     if (parser_check(p, TOKEN_INT_LITERAL)) {
         Token t = p->current; parser_advance(p);
+        /* Check for range pattern: 1..9 or 1..=9 */
+        if (parser_check(p, TOKEN_DOT_DOT) || parser_check(p, TOKEN_DOT_DOT_EQ)) {
+            bool inclusive = parser_match(p, TOKEN_DOT_DOT_EQ);
+            if (!inclusive) parser_match(p, TOKEN_DOT_DOT); /* consume .. */
+            if (parser_check(p, TOKEN_INT_LITERAL)) {
+                Token end_t = p->current; parser_advance(p);
+                /* Build a range binary op: left=start, right=end, op=BIN_RANGE or BIN_RANGE_INCLUSIVE */
+                AstNode *start = node_int_literal(p->arena, t.loc, t.val.int_value);
+                AstNode *end = node_int_literal(p->arena, end_t.loc, end_t.val.int_value);
+                return node_binary(p->arena, t.loc, inclusive ? BIN_RANGE_INCLUSIVE : BIN_RANGE, start, end);
+            }
+            parser_error(p, p->current, "expected range end value");
+            return NULL;
+        }
         return node_int_literal(p->arena, t.loc, t.val.int_value);
     }
 
@@ -1755,6 +1822,11 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_unary(p->arena, loc, UNARY_HEAP, parse_expr_prec(p, PREC_UNARY));
 
+        case TOKEN_HASH:
+            /* #expr — array length prefix operator */
+            parser_advance(p);
+            return node_unary(p->arena, loc, UNARY_ARRAY_LEN, parse_expr_prec(p, PREC_UNARY));
+
         default:
             parser_error(p, token, "expected expression");
             parser_advance(p);
@@ -1842,7 +1914,8 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         case TOKEN_LT_EQ: op = BIN_LE; break;
         case TOKEN_GT_EQ: op = BIN_GE; break;
         case TOKEN_AND_AND: case TOKEN_KW_AND: op = BIN_AND; break;
-        case TOKEN_PIPE_PIPE: case TOKEN_KW_OR: op = BIN_OR; break;
+        case TOKEN_PIPE_PIPE: op = BIN_OR; break;
+        case TOKEN_KW_OR: op = BIN_OR_ELSE; break;
         case TOKEN_AMPERSAND: op = BIN_BIT_AND; break;
         case TOKEN_PIPE: op = BIN_BIT_OR; break;
         case TOKEN_CARET: op = BIN_BIT_XOR; break;

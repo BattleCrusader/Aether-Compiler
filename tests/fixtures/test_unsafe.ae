@@ -1,0 +1,8 @@
+// test_unsafe.ae — test unsafe block codegen
+func main(): u64 {
+    let x: u64 = 42
+    unsafe {
+        let y = x
+    }
+    return x
+}
