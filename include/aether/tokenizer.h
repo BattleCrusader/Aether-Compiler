@@ -131,6 +131,9 @@ typedef enum {
     TOKEN_LBRACE,       /* { */
     TOKEN_RBRACE,       /* } */
 
+    /* Power operator */
+    TOKEN_STAR_STAR,    /* ** */
+
     /* Assignment operators */
     TOKEN_PLUS_EQ,      /* += */
     TOKEN_PLUS_PLUS,    /* ++ */
