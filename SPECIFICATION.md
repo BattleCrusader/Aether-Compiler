@@ -3,6 +3,8 @@
 **Version**: 1.0 (Comprehensive)
 **Status**: Living Document — Last updated: 2026-06-24 — Comprehensive audit complete. See annotations for implementation status.
 
+> **AUDIT NOTE (2026-06-24)**: This specification has been audited against the compiler source code. Discrepancies between spec and implementation are annotated with `⚠️` (partially implemented), `❌` (not implemented), or `🔧` (spec mismatch — implementation differs from spec). See individual sections for details.
+
 ---
 
 ## Table of Contents
@@ -106,12 +108,14 @@ aether run hello.ae
 
 ### 3.1 Comments
 
+> **🔧 SPEC MISMATCH**: The spec documents `//` and `/* */` comment syntax. The actual implementation uses `#` for line comments and `#{ }#` for nestable block comments. This section has been corrected to match the implementation.
+
 ```aether
-// Line comment
+# Line comment
 
-/* Block comment */
+#{ Block comment }#
 
-/* Nested /* block */ comments */
+#{ Nested #{ block }# comments }#
 ```
 
 ### 3.2 Identifiers
@@ -146,17 +150,19 @@ u128        while
 ### 3.4 Operators
 
 ```aether
-Arithmetic:     +   -   *   /   %   **
+Arithmetic:     +   -   *   /   %
 Comparison:     ==  !=  <   >   <=  >=
-Logical:        &&  ||  !
+Logical:        &&  ||  !   and or not
 Bitwise:        &   |   ^   <<  >>
 Assignment:     =   +=  -=  *=  /=  %=  &=  |=  ^=  <<=  >>=
 Member:         .   ->
 Scope:          ::
-Arrow:          =>
-Range:          ..
+Arrow:          ->
+Range:          ..  ..=
 Pattern:        |   ..=
 ```
+
+> **🔧 SPEC MISMATCH**: The spec previously listed `**` (power operator) and `=>` (arrow). The `**` operator is not implemented in the tokenizer. The arrow syntax is `->` (TOKEN_ARROW), not `=>`. The `and`, `or`, `not` keyword operators are also supported alongside `&&`, `||`, `!`.
 
 **String Concatenation with `+`**: The `+` operator is overloaded at the language level. When either operand is a string, `+` performs string concatenation instead of numeric addition. This is detected at codegen time by the `is_string_expr()` helper.
 
@@ -203,10 +209,9 @@ let s = "count = {n}"           // "count = 42" (auto-converted via __aether_ito
 let sum = "total: {x + y}"      // expressions work too
 
 // Multi-line strings
-"""
-This is a
-multi-line string
-"""
+// ❌ NOT YET IMPLEMENTED — Triple-quoted string syntax is not supported.
+// Use string concatenation or interpolation instead.
+// """ ... """ syntax is reserved for future implementation.
 
 // Character literals
 'a'
@@ -318,10 +323,13 @@ let none_val: u64? = none
 
 ### 4.3 Type Aliases
 
+> **❌ NOT YET IMPLEMENTED** — The `type` keyword is tokenized but not handled in the parser. `NODE_TYPE_ALIAS` exists in the AST but no parser code creates these nodes. Type aliases are reserved for future implementation.
+
 ```aether
-type Result = u64
-type ErrorCode = i32
-type Callback = func(u64): bool
+// ❌ NOT YET IMPLEMENTED
+// type Result = u64
+// type ErrorCode = i32
+// type Callback = func(u64): bool
 ```
 
 ### 4.4 Structs
@@ -401,7 +409,8 @@ if let val = x {
 }
 
 // Unwrap with default
-let val = x or 0
+// ❌ NOT YET IMPLEMENTED — The `or` operator for optional unwrap is not supported.
+// let val = x or 0
 ```
 
 ---
@@ -566,9 +575,10 @@ for val in arr {
 }
 
 // With index
-for i, val in arr {
-    print("arr[{i}] = {val}")
-}
+// ❌ NOT YET IMPLEMENTED — Index+value iteration syntax is not supported.
+// for i, val in arr {
+//     print("arr[{i}] = {val}")
+// }
 ```
 
 ### 7.4 Break and Continue
@@ -585,20 +595,22 @@ for i in 0..100 {
 
 ```aether
 match value {
-    case 0 => print("zero")
-    case 1..9 => print("single digit")
-    case > 100 => print("big")
-    case string(s) => print("got string: {s}")
-    case _ => print("default")
+    case 0 -> print("zero")
+    // ❌ Range patterns (case 1..9) not yet implemented
+    // ❌ Guard patterns (case > 100) not yet implemented
+    // ❌ Enum destructuring (case string(s)) not yet implemented
+    case _ -> print("default")
 }
 
 // Match as expression
 let description = match value {
-    case 0 => "zero"
-    case 1..9 => "small"
-    case _ => "large"
+    case 0 -> "zero"
+    // ❌ Range patterns not yet implemented
+    case _ -> "large"
 }
 ```
+
+> **🔧 SPEC MISMATCH**: The spec previously used `=>` for match arms. The actual syntax uses `->` (TOKEN_ARROW). Range patterns (`case 1..9`), guard patterns (`case > 100`), and enum destructuring (`case string(s)`) are not yet implemented — only literal int and wildcard (`_`) patterns work.
 
 ### 7.6 Defer
 
@@ -701,7 +713,7 @@ let y = x or 0
 
 ### 8.7 Pointers (Opt-In, Unsafe)
 
-Raw pointers exist for hardware interaction, DMA, and inline assembly. They require an `unsafe` block.
+> **⚠️ PARSED BUT NO-OP CODEGEN** — `unsafe` blocks are parsed into `NODE_UNSAFE` AST nodes. The codegen emits the body without any special handling — no memory protection changes, no bounds-check suppression. Full unsafe semantics are reserved for future implementation.
 
 ```aether
 func read_mmio(addr: ptr u64): u64 {
@@ -1851,7 +1863,7 @@ aether build --target universal-all --output kernel.elf
 
 ## 21. Standard Library
 
-> **Implementation status**: ⚠️ Partially implemented — `std.io` (print, println), `std.mem` (alloc, free), `std.serial` (COM1, putc, puts), `std.test` (assert, test_runner) are implemented. Other modules are planned.
+> **Implementation status**: ⚠️ Partially implemented — `std.io` (print, println, printHex, printDecimal, readLine), `std.mem` (alloc, free, copyMemory, zeroMemory, memset, memcmp), `std.str` (concat, strlen, strcmp/strEq, split, trim, toUpper, toLower, substring, startsWith, endsWith, contains, replace, join), `std.math` (absoluteValue, min, max, clamp, integerSquareRoot, power, isPrime, greatestCommonDivisor, leastCommonMultiple), `std.collections` (HashMap, Set, Queue), `std.serial` (COM1, putc, puts), `std.test` (assertEquals, assertTrue, test_runner), `std.asm` (NASM helper macros), `std.arch` (architecture detection), `std.elf` (ELF64 reader), `std.fs` (file system helpers) are implemented. `formatString` in std.io is a stub (variadic template requires compiler support).
 
 The compiler ships a freestanding standard library:
 
@@ -1873,20 +1885,18 @@ The compiler ships a freestanding standard library:
 
 ## 22. Build System
 
-> **Implementation status**: ⚠️ Partially implemented — `aether build`, `aether run`, and `aether test` CLI commands work. Other commands (`fmt`, `doc`, `asm`, `inspect`, `init`) are planned.
+> **Implementation status**: ⚠️ Partially implemented — `aether build`, `aether run`, `aether asm`, and `aether inspect` CLI commands work. `aether test` is not a separate command (tests run via `make test-host`). `aether fmt`, `aether doc`, `aether init`/`aether new` are planned.
 
 ### 22.1 `aether` CLI
 
 ```
-aether new      <name>          # Create new project
-aether build    [--target=...]   # Compile project
+aether build    [--target=...]   # Compile source file
 aether run      [--target=...]   # Build and run
-aether test     [--target=...]   # Run unit tests
-aether fmt      [files...]       # Format source
-aether doc      [files...]       # Generate documentation
-aether asm      [file.ae]        # Show generated assembly
+aether asm      [--target=...]   # Show generated assembly
 aether inspect  [binary]         # Inspect ELF metadata
-aether init     [--lib|--bin]    # Init project structure
+aether init|new <name>           # Scaffold new project (planned)
+aether fmt      [files...]       # Format source (planned)
+aether doc      [files...]       # Generate documentation (planned)
 ```
 
 ### 22.2 Project Structure
@@ -1945,11 +1955,13 @@ std = { path = "/lib/aether/std" }
 
 ## 24. Think Outside the Box: Unique Aether Innovations
 
-> **Implementation status**: ⚠️ Mostly aspirational — compile-time OS knowledge (§24.1) and zero-cost error context (§24.10) are partially implemented. Most other features in this section (§24.2–§24.12) are aspirational/planned.
+> **Implementation status**: ❌ Mostly aspirational — most features in this section (§24.2–§24.12) are aspirational/planned and not yet implemented. Compile-time OS knowledge (§24.1) and zero-cost error context (§24.10) are partially implemented. See individual subsections for details.
 
 This section describes the features that make Aether genuinely different from other systems languages.
 
 ### 24.1 Compile-Time OS Knowledge
+
+> **✅ Implemented** — The compiler has baked-in knowledge of the Aether OS memory map, syscall table layout, and boot chain requirements. `@layout` and `@kernel_layout` attributes are implemented and verified.
 
 The compiler has baked-in knowledge of the Aether OS architecture. It knows the memory map, the syscall table layout, the module registry structure, and the boot chain requirements. This means:
 
@@ -2160,6 +2172,8 @@ interrupt keyboard at(0x21) {
 
 ## 25. Concurrency and Fibers
 
+> **Implementation status**: ❌ Not yet implemented — all features in this section (spawn, mutex, channels, fiber scheduler) are aspirational/planned. No concurrency primitives exist in the compiler or standard library.
+
 ### 25.1 Spawn
 
 ```aether
@@ -2200,6 +2214,8 @@ The compiler generates code compatible with the Aether OS fiber scheduler:
 ---
 
 ## 26. Advanced OS Integration
+
+> **Implementation status**: ❌ Not yet implemented — all features in this section (boot chain generation, interrupt handlers, self-documenting binaries, capability-based security, unit checking) are aspirational/planned. None are implemented in the compiler.
 
 ### 26.1 Automatic Boot Chain Generation
 
@@ -2287,6 +2303,8 @@ func speed(d: f64, t: f64): f64 {
 
 ## 27. Goal-Oriented I/O and Query Fusion
 
+> **Implementation status**: ❌ Not yet implemented — all features in this section (goal-oriented I/O, query fusion, pattern-based metaprogramming) are aspirational/planned. None are implemented in the compiler.
+
 ### 27.1 Goal-Oriented I/O
 
 Instead of describing *how* to read a file, describe *what* you want:
@@ -2337,6 +2355,8 @@ impl<T> trait Hashable {
 ---
 
 ## 28. Protocol Generation and Hardware Configuration
+
+> **Implementation status**: ❌ Not yet implemented — all features in this section (automatic protocol generation, compile-time hardware configuration) are aspirational/planned. The `protocol` keyword is parsed but codegen is a comment stub.
 
 ### 28.1 Automatic Protocol Generation
 
@@ -2509,7 +2529,7 @@ var, where, while, yield
 | Comment | `#` to end of line |
 | Block comment | `#{` ... `}#` (nestable) |
 | String | Double-quoted, escape sequences: `\n`, `\t`, `\\`, `\"`, `\xNN` |
-| Multi-line string | `"""` ... `"""` (preserves newlines and indentation) |
+| Multi-line string | ❌ Not yet implemented — `"""` ... `"""` syntax is reserved |
 | Char | Single-quoted: `'a'`, `'\n'`, `'\x41'` |
 | Integer | Decimal: `42`, Hex: `0xFF`, Binary: `0b1010`, Octal: `0o77` |
 | Float | `3.14`, `1e10`, `0xFF.0p-3` |
