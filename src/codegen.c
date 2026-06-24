@@ -257,6 +257,18 @@ static char *decl_name(AstNode *node) {
                 return result ? result : strdup("");
             }
             break;
+        case NODE_TYPE_ALIAS:
+            /* Type alias: name is first item in list */
+            if (node->data.list.count > 0 && node->data.list.items[0]->type == NODE_IDENT) {
+                StringView *sv = &node->data.list.items[0]->data.ident.name;
+                char *result = (char *)malloc(sv->len + 1);
+                if (result) {
+                    memcpy(result, sv->data, sv->len);
+                    result[sv->len] = '\0';
+                }
+                return result ? result : strdup("");
+            }
+            break;
         default:
             break;
     }
@@ -277,6 +289,8 @@ static bool decl_is_pub(AstNode *node) {
             return node->data.enum_decl.is_pub;
         case NODE_CONST_DECL:
             return node->data.let_decl.is_mut; /* const is always accessible */
+        case NODE_TYPE_ALIAS:
+            return true; /* type aliases are always accessible */
         default:
             return false;
     }
@@ -1076,7 +1090,39 @@ static void frame_collect(Arena *a, AstNode *node, VarSlot **list, int *offset) 
             break;
 
         case NODE_FOR:
-            frame_collect(a, node->data.for_node.var, list, offset);
+            /* Create a stack slot for the loop variable (it's an ident, not a let) */
+            if (node->data.for_node.var && node->data.for_node.var->type == NODE_IDENT) {
+                *offset += 8;
+                VarSlot *slot = (VarSlot *)arena_alloc(a, sizeof(VarSlot));
+                slot->node = node->data.for_node.var;
+                slot->name = arena_strndup(a,
+                    node->data.for_node.var->data.ident.name.data,
+                    node->data.for_node.var->data.ident.name.len);
+                slot->stack_offset = -(*offset);
+                slot->size = 8;
+                slot->actual_size = 8;
+                slot->prim = PRIM_U64;
+                slot->next = *list;
+                *list = slot;
+            }
+            /* Also create a slot for the index variable if present */
+            if (node->data.for_node.index_var) {
+                AstNode *index_var = node->data.for_node.index_var;
+                if (index_var && index_var->type == NODE_IDENT) {
+                    *offset += 8;
+                    VarSlot *slot = (VarSlot *)arena_alloc(a, sizeof(VarSlot));
+                    slot->node = index_var;
+                    slot->name = arena_strndup(a,
+                        index_var->data.ident.name.data,
+                        index_var->data.ident.name.len);
+                    slot->stack_offset = -(*offset);
+                    slot->size = 8;
+                    slot->actual_size = 8;
+                    slot->prim = PRIM_U64;
+                    slot->next = *list;
+                    *list = slot;
+                }
+            }
             frame_collect(a, node->data.for_node.iterable, list, offset);
             frame_collect(a, node->data.for_node.body, list, offset);
             break;
@@ -2086,8 +2132,8 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
             int start_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
 
-            /* Check if we have an index variable (stored in data.list) */
-            AstNode *index_var = (node->data.list.count > 0) ? node->data.list.items[0] : NULL;
+            /* Check if we have an index variable */
+            AstNode *index_var = node->data.for_node.index_var;
 
             /* If for has iterable, evaluate it */
             if (node->data.for_node.iterable) {

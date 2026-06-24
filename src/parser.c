@@ -425,7 +425,9 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
         if (parser_check(p, TOKEN_IDENT)) {
             Token name_tok = p->current; parser_advance(p);
             AstNode *alias = node_create(p->arena, NODE_TYPE_ALIAS, name_tok.loc);
-            alias->data.ident.name = name_tok.text;
+            /* Store name as first item in list, underlying type as second */
+            AstNode *name_node = node_ident(p->arena, name_tok.loc, name_tok.text);
+            node_list_append(&alias->data.list, name_node);
             if (parser_match(p, TOKEN_EQ)) {
                 AstNode *underlying = parse_type(p);
                 if (underlying) {
@@ -600,6 +602,8 @@ AstNodeList parse_params(Parser *p) {
         /* Variadic: ... before param name or ... before type */
         if (parser_match(p, TOKEN_DOT_DOT)) {
             is_varargs = true;
+            /* Consume the third dot if present: ...name */
+            parser_match(p, TOKEN_DOT);
         }
 
         /* Allow both TOKEN_IDENT and TOKEN_KW_SELF as param names */
@@ -611,9 +615,11 @@ AstNodeList parse_params(Parser *p) {
 
         AstNode *type = NULL;
         if (parser_match(p, TOKEN_COLON)) {
-            /* Check for ...Type syntax after colon */
+            /* Check for ...Type syntax after colon (variadic) */
             if (parser_match(p, TOKEN_DOT_DOT)) {
                 is_varargs = true;
+                /* Consume the third dot if present: ...Type */
+                parser_match(p, TOKEN_DOT);
             }
             type = parse_type(p);
         }
@@ -891,9 +897,9 @@ AstNode *parse_statement(Parser *p) {
         }
 
         AstNode *for_node = node_for(p->arena, p->previous.loc, var, iterable, body);
-        /* Store index_var in the for_node's list (hack: use list for extra var) */
+        /* Store index_var in the for_node */
         if (index_var) {
-            node_list_append(&for_node->data.list, index_var);
+            for_node->data.for_node.index_var = index_var;
         }
         return for_node;
     }
@@ -1048,7 +1054,12 @@ AstNode *parse_statement(Parser *p) {
 
     /* unsafe block */
     if (parser_match(p, TOKEN_KW_UNSAFE)) {
-        AstNode *body = parse_statement(p);
+        AstNode *body = NULL;
+        if (parser_match(p, TOKEN_LBRACE)) {
+            body = parse_block_braced(p);
+        } else {
+            body = parse_statement(p);
+        }
         if (body) {
             AstNode *unsafe_node = node_create(p->arena, NODE_UNSAFE, body->loc);
             /* Wrap the body in the unsafe node's list */

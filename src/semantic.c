@@ -375,6 +375,7 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
         }
 
         case NODE_CONST_DECL:
+        case NODE_TYPE_ALIAS:
         case NODE_STRUCT_DECL:
         case NODE_CLASS_DECL:
         case NODE_ENUM_DECL: {
@@ -382,6 +383,10 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             AstNode *name_node = NULL;
             if (node->type == NODE_STRUCT_DECL || node->type == NODE_CLASS_DECL) name_node = node->data.struct_decl.name;
             else if (node->type == NODE_ENUM_DECL) name_node = node->data.enum_decl.name;
+            else if (node->type == NODE_TYPE_ALIAS) {
+                /* Type alias: name is first item in list */
+                if (node->data.list.count > 0) name_node = node->data.list.items[0];
+            }
             else if (node->type == NODE_CONST_DECL) {
                 name_node = node->data.let_decl.name;
                 /* Evaluate const initializer at compile time */
@@ -435,7 +440,25 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             break;
 
         case NODE_FOR:
-            if (node->data.for_node.var) semantic_visit_node(sa, node->data.for_node.var);
+            /* Declare the loop variable in scope */
+            if (node->data.for_node.var) {
+                const char *vname = arena_strndup(sa->arena,
+                    node->data.for_node.var->data.ident.name.data,
+                    node->data.for_node.var->data.ident.name.len);
+                scope_declare(sa, vname, node->data.for_node.var);
+                semantic_visit_node(sa, node->data.for_node.var);
+            }
+            /* Also declare index variable if present */
+            if (node->data.for_node.index_var) {
+                AstNode *index_var = node->data.for_node.index_var;
+                if (index_var) {
+                    const char *iname = arena_strndup(sa->arena,
+                        index_var->data.ident.name.data,
+                        index_var->data.ident.name.len);
+                    scope_declare(sa, iname, index_var);
+                    semantic_visit_node(sa, index_var);
+                }
+            }
             if (node->data.for_node.iterable) semantic_visit_expr(sa, node->data.for_node.iterable);
             if (node->data.for_node.body) semantic_visit_node(sa, node->data.for_node.body);
             break;

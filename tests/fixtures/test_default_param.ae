@@ -1,6 +1,6 @@
 // test_default_param.ae — test default function parameters
 func greet(name: string, greeting: string = "Hello"): string {
-    return greeting ++ " " ++ name
+    return greeting + " " + name
 }
 
 func main(): u64 {

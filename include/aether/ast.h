@@ -230,6 +230,7 @@ typedef struct {
     AstNode *var;           /* loop variable */
     AstNode *iterable;      /* range or collection */
     AstNode *body;
+    AstNode *index_var;     /* index variable for for i, val in arr (NULL if not present) */
 } ForNode;
 
 /* Match */
