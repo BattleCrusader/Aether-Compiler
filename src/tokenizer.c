@@ -202,6 +202,7 @@ const char *token_type_name(TokenType type) {
         case TOKEN_BACKSLASH: return "\\";
         case TOKEN_SEMICOLON: return ";";
         case TOKEN_COLON_COLON: return "::";
+        case TOKEN_STAR_STAR: return "**";
     }
     return "UNKNOWN";
 }
@@ -666,7 +667,9 @@ Token tokenizer_next(Tokenizer *t) {
                 case '+': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_PLUS_EQ); } 
                           if (next == '+') { t->pos++; t->col++; return make_token(t, TOKEN_PLUS_PLUS); } 
                           return make_token(t, TOKEN_PLUS);
-                case '*': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_STAR_EQ); } return make_token(t, TOKEN_STAR);
+                case '*': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_STAR_EQ); }
+                          if (next == '*') { t->pos++; t->col++; return make_token(t, TOKEN_STAR_STAR); }
+                          return make_token(t, TOKEN_STAR);
                 case '/': if (next == '=') { t->pos++; t->col++; return make_token(t, TOKEN_SLASH_EQ); } return make_token(t, TOKEN_SLASH);
                 case '.': 
                     if (next == '.') {

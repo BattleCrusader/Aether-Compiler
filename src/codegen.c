@@ -1507,6 +1507,33 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 }
                 case BIN_SUB: cg_inst1(cg, "sub",  "rax, rcx"); break;
                 case BIN_MUL: cg_inst1(cg, "mul",  "rcx"); break;
+                case BIN_POWER: {
+                    /* Power: rax = rax ** rcx (left = base, right = exponent) */
+                    int pow_start = cg_new_label(cg);
+                    int pow_done = cg_new_label(cg);
+                    cg_comment(cg, "power operator **");
+                    /* Save base (rax) and exponent (rcx) */
+                    cg_inst1(cg, "push", "rcx");   /* save exponent */
+                    cg_inst1(cg, "push", "rax");   /* save base */
+                    /* Load base into rcx for mul */
+                    cg_inst(cg, "mov rcx, [rsp]");
+                    /* Initialize result = 1 */
+                    cg_inst1(cg, "mov", "rax, 1");
+                    /* Load exponent into r8 (mul clobbers rdx) */
+                    cg_inst(cg, "mov r8, [rsp+8]");
+                    /* If exponent == 0, skip loop */
+                    cg_inst(cg, "test r8, r8");
+                    cg_write_fmt(cg, "    jz L_%x\n", pow_done);
+                    cg_write_fmt(cg, "L_%x:\n", pow_start);
+                    /* Multiply result by base (rcx) */
+                    cg_inst1(cg, "mul", "rcx");
+                    /* Decrement exponent */
+                    cg_inst1(cg, "dec", "r8");
+                    cg_write_fmt(cg, "    jnz L_%x\n", pow_start);
+                    cg_write_fmt(cg, "L_%x:\n", pow_done);
+                    cg_inst(cg, "add rsp, 16");  /* pop base and exponent */
+                    break;
+                }
                 case BIN_DIV: cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); break;
                 case BIN_MOD: cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); cg_inst1(cg, "mov", "rax, rdx"); break;
                 case BIN_EQ:  cg_inst1(cg, "cmp",  "rax, rcx"); cg_inst(cg, "sete al");  cg_inst(cg, "movzx rax, al"); break;

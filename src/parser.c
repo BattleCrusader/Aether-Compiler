@@ -1527,7 +1527,7 @@ static Precedence token_precedence(TokenType type) {
         case TOKEN_LT_LT: case TOKEN_GT_GT: return PREC_SHIFT;
         case TOKEN_DOT_DOT: case TOKEN_DOT_DOT_EQ: return PREC_RANGE;
         case TOKEN_PLUS: case TOKEN_MINUS: return PREC_TERM;
-        case TOKEN_STAR: case TOKEN_SLASH: case TOKEN_PERCENT: return PREC_FACTOR;
+        case TOKEN_STAR: case TOKEN_SLASH: case TOKEN_PERCENT: case TOKEN_STAR_STAR: return PREC_FACTOR;
         default: return PREC_MIN;
     }
 }
@@ -1905,6 +1905,7 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         case TOKEN_PLUS: op = BIN_ADD; break;
         case TOKEN_MINUS: op = BIN_SUB; break;
         case TOKEN_STAR: op = BIN_MUL; break;
+        case TOKEN_STAR_STAR: op = BIN_POWER; break;
         case TOKEN_SLASH: op = BIN_DIV; break;
         case TOKEN_PERCENT: op = BIN_MOD; break;
         case TOKEN_EQ_EQ: op = BIN_EQ; break;
