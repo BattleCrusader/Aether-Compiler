@@ -109,6 +109,7 @@ typedef enum {
     BIN_MUL_ASSIGN, BIN_DIV_ASSIGN,
     BIN_RANGE, BIN_RANGE_INCLUSIVE,
     BIN_CONCAT,  /* string concatenation */
+    BIN_OR_ELSE, /* optional unwrap: x or default */
 } BinOp;
 
 /* ================================================================

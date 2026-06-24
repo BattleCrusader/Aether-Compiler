@@ -1,5 +1,5 @@
 // test_mem.ae — comprehensive tests for std/mem.ae
-// Tests: copyMemory, zeroMemory, alloc, free, memset, memcmp
+// Tests: copyMemory, memoryCopy, zeroMemory, alloc, free, realloc, memset, memcmp
 
 import "std/test"
 import "std/mem"
@@ -10,6 +10,11 @@ func main() {
     let ptr: u64 = alloc(64)
     assertTrue(ptr != 0, "alloc returns non-zero pointer")
     free(ptr)
+
+    // realloc - verify it returns a non-zero pointer
+    let reallocPtr: u64 = realloc(0, 64)
+    assertTrue(reallocPtr != 0, "realloc returns non-zero pointer")
+    free(reallocPtr)
 
     // copyMemory - copy data and verify
     let src: u64 = alloc(16)
@@ -23,6 +28,16 @@ func main() {
     assertEquals(cmpResult, 0, "copyMemory: memcmp after copy equals 0")
     free(src)
     free(dst)
+
+    // memoryCopy - alias for copyMemory
+    let src2: u64 = alloc(16)
+    let dst2: u64 = alloc(16)
+    memset(src2, 0xCD, 16)
+    memoryCopy(dst2, src2, 16)
+    let cmpResult2: i64 = memcmp(src2, dst2, 16)
+    assertEquals(cmpResult2, 0, "memoryCopy: memcmp after copy equals 0")
+    free(src2)
+    free(dst2)
 
     // zeroMemory
     let buf: u64 = alloc(16)

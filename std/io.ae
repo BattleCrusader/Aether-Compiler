@@ -2,7 +2,11 @@
 // print() calls through the syscall page (slot 1 = puts).
 // println() adds a newline.
 
+import "std/mem"
+
 sys func puts(s: string) at(1)
+sys func putserr(s: string) at(2)
+sys func read(fileDescriptor: u64, buffer: u64, count: u64): u64 at(0)
 
 func print(value: string) {
     puts(value)
@@ -12,7 +16,13 @@ func println(value: string) {
     print(value + "\n")
 }
 
-sys func read(fileDescriptor: u64, buffer: u64, count: u64): u64 at(0)
+func printLine(value: string) {
+    println(value)
+}
+
+func printError(value: string) {
+    putserr(value)
+}
 
 func readLine(): string {
     let mut result: string = ""

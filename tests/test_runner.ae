@@ -1,11 +1,11 @@
 // test_runner.ae — Aether Test Runner (written in pure Aether)
-#
+//
 // Scans tests/fixtures/*.ae for @test(expect=N) annotations,
 // compiles each with the aether compiler, runs it, compares exit code.
-#
+//
 // Build: aether --target host tests/test_runner.ae -o /tmp/kernel/test_runner
 // Run:   /tmp/kernel/test_runner [fixtures_dir] [aether_bin]
-#
+//
 // Uses inline asm ONLY for host syscalls that Aether can't express yet:
 //   - read_file: open+read (macOS syscalls 2, 3)
 //   - run_process: fork+exec+wait (macOS syscalls 2, 59, 7)

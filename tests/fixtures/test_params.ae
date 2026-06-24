@@ -10,7 +10,7 @@ func factorial(n: u64): u64 {
 
 @test(expect=150)
 func main(): u64 {
-    let r1 = add(10, 20)        # 30
-    let r2 = factorial(5)       # 120
-    return r1 + r2              # 150
+    let r1 = add(10, 20)        // 30
+    let r2 = factorial(5)       // 120
+    return r1 + r2              // 150
 }

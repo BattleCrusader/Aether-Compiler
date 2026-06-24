@@ -1,8 +1,8 @@
 // test_collections.ae — comprehensive tests for std/collections.ae
-// Tests: Array, List, HashMap (put, get, containsKey, remove, len),
-//        Set (put, contains, remove, len), Queue (enqueue, dequeue, isEmpty, len)
+// Tests: Array, List, HashMap, Set, Queue, Stack, Deque
 
 import "std/test"
+import "std/collections"
 
 @test
 func main() {
@@ -113,4 +113,94 @@ func main() {
     assertEquals(queueDequeue(&queue2), 4, "queue wrap dequeue 4")
     assertEquals(queueDequeue(&queue2), 5, "queue wrap dequeue 5")
     assertTrue(queueIsEmpty(&queue2), "queue wrap empty after all")
+
+    // --- Stack (LIFO) ---
+
+    let stack: Stack = newStack(8)
+    assertTrue(stackIsEmpty(&stack), "newStack isEmpty true")
+    assertEquals(stackLen(&stack), 0, "newStack len 0")
+
+    // peek on empty stack
+    assertEquals(stackPeek(&stack), 0, "stack peek empty returns 0")
+
+    // pop on empty stack
+    assertEquals(stackPop(&stack), 0, "stack pop empty returns 0")
+
+    // push and pop
+    stackPush(&stack, 10)
+    stackPush(&stack, 20)
+    stackPush(&stack, 30)
+    assertTrue(!stackIsEmpty(&stack), "stack not empty after pushes")
+    assertEquals(stackLen(&stack), 3, "stack len after 3 pushes")
+
+    // peek
+    assertEquals(stackPeek(&stack), 30, "stack peek top")
+
+    // pop in LIFO order
+    assertEquals(stackPop(&stack), 30, "stack pop first (LIFO)")
+    assertEquals(stackPop(&stack), 20, "stack pop second (LIFO)")
+    assertEquals(stackPop(&stack), 10, "stack pop third (LIFO)")
+    assertTrue(stackIsEmpty(&stack), "stack empty after all pops")
+    assertEquals(stackLen(&stack), 0, "stack len 0 after all pops")
+
+    // push after pop
+    stackPush(&stack, 100)
+    assertEquals(stackPeek(&stack), 100, "stack peek after re-push")
+    assertEquals(stackPop(&stack), 100, "stack pop after re-push")
+    assertTrue(stackIsEmpty(&stack), "stack empty after single pop")
+
+    // --- Deque (double-ended queue) ---
+
+    let deque: Deque = newDeque(8)
+    assertTrue(dequeIsEmpty(&deque), "newDeque isEmpty true")
+    assertEquals(dequeLen(&deque), 0, "newDeque len 0")
+
+    // pop from empty
+    assertEquals(dequePopFront(&deque), 0, "deque popFront empty returns 0")
+    assertEquals(dequePopBack(&deque), 0, "deque popBack empty returns 0")
+
+    // pushBack and popFront (FIFO behavior)
+    dequePushBack(&deque, 10)
+    dequePushBack(&deque, 20)
+    dequePushBack(&deque, 30)
+    assertEquals(dequeLen(&deque), 3, "deque len after 3 pushBack")
+    assertEquals(dequePopFront(&deque), 10, "deque popFront first")
+    assertEquals(dequePopFront(&deque), 20, "deque popFront second")
+    assertEquals(dequePopFront(&deque), 30, "deque popFront third")
+    assertTrue(dequeIsEmpty(&deque), "deque empty after popFront all")
+
+    // pushFront and popBack (LIFO behavior)
+    dequePushFront(&deque, 10)
+    dequePushFront(&deque, 20)
+    dequePushFront(&deque, 30)
+    assertEquals(dequeLen(&deque), 3, "deque len after 3 pushFront")
+    assertEquals(dequePopBack(&deque), 10, "deque popBack first")
+    assertEquals(dequePopBack(&deque), 20, "deque popBack second")
+    assertEquals(dequePopBack(&deque), 30, "deque popBack third")
+    assertTrue(dequeIsEmpty(&deque), "deque empty after popBack all")
+
+    // mixed pushFront/pushBack
+    dequePushBack(&deque, 1)
+    dequePushFront(&deque, 2)
+    dequePushBack(&deque, 3)
+    assertEquals(dequeLen(&deque), 3, "deque len after mixed pushes")
+    assertEquals(dequePopFront(&deque), 2, "deque mixed popFront first")
+    assertEquals(dequePopBack(&deque), 3, "deque mixed popBack last")
+    assertEquals(dequePopFront(&deque), 1, "deque mixed popFront remaining")
+    assertTrue(dequeIsEmpty(&deque), "deque empty after mixed ops")
+
+    // wrap-around behavior
+    let deque2: Deque = newDeque(4)
+    dequePushBack(&deque2, 1)
+    dequePushBack(&deque2, 2)
+    dequePushBack(&deque2, 3)
+    assertEquals(dequePopFront(&deque2), 1, "deque wrap popFront 1")
+    assertEquals(dequePopFront(&deque2), 2, "deque wrap popFront 2")
+    dequePushBack(&deque2, 4)
+    dequePushBack(&deque2, 5)
+    assertEquals(dequeLen(&deque2), 3, "deque wrap len 3")
+    assertEquals(dequePopFront(&deque2), 3, "deque wrap popFront 3")
+    assertEquals(dequePopFront(&deque2), 4, "deque wrap popFront 4")
+    assertEquals(dequePopFront(&deque2), 5, "deque wrap popFront 5")
+    assertTrue(dequeIsEmpty(&deque2), "deque wrap empty after all")
 }

@@ -1,5 +1,5 @@
 // test_io.ae — comprehensive tests for std/io.ae
-// Tests: print, println, printHex, printDecimal
+// Tests: print, println, printLine, printError, printHex, printDecimal
 // Note: readLine and formatString are not easily testable in a fixture
 //       (readLine requires stdin, formatString is a stub)
 
@@ -16,6 +16,14 @@ func main() {
     // println - verify it doesn't crash
     println("hello")
     println("")
+
+    // printLine - alias for println
+    printLine("hello")
+    printLine("")
+
+    // printError - verify it doesn't crash (output goes to stderr)
+    printError("test error")
+    printError("")
 
     // printHex - verify it doesn't crash
     printHex(0)

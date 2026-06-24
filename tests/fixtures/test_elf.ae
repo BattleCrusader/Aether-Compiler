@@ -1,0 +1,72 @@
+// test_elf.ae — comprehensive tests for std/elf.ae
+// Tests: Elf64Header, Elf64SectionHeader, Elf64Symbol structs, verifyElfMagic
+
+import "std/test"
+import "std/elf"
+
+@test
+func main() {
+    // Elf64Header struct - verify it can be created and fields accessed
+    let header: Elf64Header
+    header.magic = 0x00010102464C457F
+    header.elfClass = 2
+    header.elfEndian = 1
+    header.elfVersion = 1
+    header.osabi = 0
+    header.abiVersion = 0
+    header.elfType = 2
+    header.machine = 0x3E
+    header.version2 = 1
+    header.entryAddr = 0x401000
+    header.phoff = 64
+    header.shoff = 0
+    header.flags = 0
+    header.ehsize = 64
+    header.phentsize = 56
+    header.phnum = 1
+    header.shentsize = 64
+    header.shnum = 0
+    header.shstrndx = 0
+
+    // verifyElfMagic with valid magic
+    assertTrue(verifyElfMagic(&header), "verifyElfMagic valid magic")
+
+    // verifyElfMagic with invalid magic
+    let badHeader: Elf64Header
+    badHeader.magic = 0
+    assertTrue(!verifyElfMagic(&badHeader), "verifyElfMagic invalid magic")
+
+    // Elf64SectionHeader struct - verify fields
+    let sectionHeader: Elf64SectionHeader
+    sectionHeader.name = 1
+    sectionHeader.sectionType = 1
+    sectionHeader.sectionFlags = 0x2
+    sectionHeader.addr = 0x401000
+    sectionHeader.offset = 0x1000
+    sectionHeader.size = 0x200
+    sectionHeader.link = 0
+    sectionHeader.info = 0
+    sectionHeader.addralign = 16
+    sectionHeader.entsize = 0
+    assertEquals(sectionHeader.name, 1, "Elf64SectionHeader name")
+    assertEquals(sectionHeader.sectionType, 1, "Elf64SectionHeader sectionType")
+    assertEquals(sectionHeader.sectionFlags, 0x2, "Elf64SectionHeader sectionFlags")
+    assertEquals(sectionHeader.addr, 0x401000, "Elf64SectionHeader addr")
+    assertEquals(sectionHeader.offset, 0x1000, "Elf64SectionHeader offset")
+    assertEquals(sectionHeader.size, 0x200, "Elf64SectionHeader size")
+
+    // Elf64Symbol struct - verify fields
+    let symbol: Elf64Symbol
+    symbol.name = 1
+    symbol.info = 0x12
+    symbol.other = 0
+    symbol.shndx = 1
+    symbol.value = 0x401000
+    symbol.size = 0x100
+    assertEquals(symbol.name, 1, "Elf64Symbol name")
+    assertEquals(symbol.info, 0x12, "Elf64Symbol info")
+    assertEquals(symbol.other, 0, "Elf64Symbol other")
+    assertEquals(symbol.shndx, 1, "Elf64Symbol shndx")
+    assertEquals(symbol.value, 0x401000, "Elf64Symbol value")
+    assertEquals(symbol.size, 0x100, "Elf64Symbol size")
+}
