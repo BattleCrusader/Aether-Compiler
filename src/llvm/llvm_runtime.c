@@ -48,6 +48,14 @@ void llvm_declare_runtime(LlvmCodegen *lc) {
         LLVMValueRef func = LLVMAddFunction(lc->module, "__aether_itoa", func_type);
         LLVMSetLinkage(func, LLVMExternalLinkage);
     }
+
+    /* print(string) -> i64 — write syscall wrapper */
+    {
+        LLVMTypeRef param_types[1] = { i8ptr };
+        LLVMTypeRef func_type = LLVMFunctionType(i64, param_types, 1, false);
+        LLVMValueRef func = LLVMAddFunction(lc->module, "print", func_type);
+        LLVMSetLinkage(func, LLVMExternalLinkage);
+    }
 }
 
 /* ──────────────────────────────────────────────
