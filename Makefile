@@ -3,6 +3,24 @@ HOST_CFLAGS = -std=c11 -Wall -Wextra -g -O0 -Iinclude -D_GNU_SOURCE \
 	-DLD='"x86_64-elf-ld"' \
 	-DSEGFAULT_HELPER='"$(CURDIR)/build/segfault_helper.o"'
 
+# LLVM configuration
+LLVM_PREFIX ?= /opt/homebrew/opt/llvm
+LLVM_CONFIG ?= $(LLVM_PREFIX)/bin/llvm-config
+LLVM_CFLAGS := $(shell PATH="$(LLVM_PREFIX)/bin:$$PATH" $(LLVM_CONFIG) --cflags 2>/dev/null)
+LLVM_LDFLAGS := $(shell PATH="$(LLVM_PREFIX)/bin:$$PATH" $(LLVM_CONFIG) --ldflags --libs --system-libs 2>/dev/null)
+
+# LLVM source files
+LLVM_SRCS = \
+	src/llvm/llvm_init.c \
+	src/llvm/llvm_types.c \
+	src/llvm/llvm_expr.c \
+	src/llvm/llvm_stmt.c \
+	src/llvm/llvm_func.c \
+	src/llvm/llvm_runtime.c \
+	src/llvm/llvm_target.c \
+	src/llvm/llvm_sym.c \
+	src/llvm/llvm_gen.c
+
 GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
@@ -48,10 +66,16 @@ SEGFAULT_HELPER_SRC = src/segfault_helper.c
 SEGFAULT_HELPER_OBJ = build/segfault_helper.o
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
+LLVM_OBJS = $(LLVM_SRCS:src/llvm/%.c=$(BUILD_DIR)/llvm/%.o)
 
 .PHONY: all clean test tokenizer parser-test aether-cli install uninstall install-local
 
 all: tokenizer parser-test aether-cli
+
+# Pattern: compile src/llvm/*.c to build/llvm/*.o (must come before generic pattern)
+$(BUILD_DIR)/llvm/%.o: src/llvm/%.c include/aether/llvm.h
+	@mkdir -p $(@D)
+	$(HOST_CC) $(HOST_CFLAGS) $(LLVM_CFLAGS) -c $< -o $@
 
 # Pattern: compile src/*.c to build/*.o
 $(BUILD_DIR)/%.o: src/%.c
@@ -75,10 +99,10 @@ $(BUILD_DIR)/test_asm: $(CORE_OBJS) $(BUILD_DIR)/test_asm.o
 
 $(BUILD_DIR)/aether.o: $(AETHER_MAIN_SRC)
 	@mkdir -p $(@D)
-	$(HOST_CC) $(HOST_CFLAGS) -DGIT_HASH='"$(GIT_HASH)"' -DGIT_BRANCH='"$(GIT_BRANCH)"' -c $< -o $@
+	$(HOST_CC) $(HOST_CFLAGS) $(LLVM_CFLAGS) -DGIT_HASH='"$(GIT_HASH)"' -DGIT_BRANCH='"$(GIT_BRANCH)"' -c $< -o $@
 
-$(BUILD_DIR)/aether: $(CORE_OBJS) $(BUILD_DIR)/aether.o $(SEGFAULT_HELPER_OBJ)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(CORE_OBJS) $(BUILD_DIR)/aether.o
+$(BUILD_DIR)/aether: $(CORE_OBJS) $(LLVM_OBJS) $(BUILD_DIR)/aether.o $(SEGFAULT_HELPER_OBJ)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(CORE_OBJS) $(LLVM_OBJS) $(BUILD_DIR)/aether.o $(LLVM_LDFLAGS)
 
 # Segfault helper — compiled with host CC (needs libSystem for signal/backtrace)
 $(SEGFAULT_HELPER_OBJ): $(SEGFAULT_HELPER_SRC)

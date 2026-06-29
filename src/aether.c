@@ -17,6 +17,7 @@
 #include "aether/parser.h"
 #include "aether/semantic.h"
 #include "aether/codegen.h"
+#include "aether/llvm.h"
 #include "aether/optimizer.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -729,6 +730,7 @@ int main(int argc, char **argv) {
     int run_mode = 0;
     int opt_level = 1; /* -O1 default */
     int dump_opt = 0;
+    int use_llvm = 0;   /* use LLVM backend instead of NASM */
     Target target = TARGET_HOST; /* default: auto-detect */
     const char *linker_script = NULL;
 
@@ -824,6 +826,8 @@ int main(int argc, char **argv) {
             opt_level = 3;
         } else if (strcmp(argv[i], "--dump-opt") == 0) {
             dump_opt = 1;
+        } else if (strcmp(argv[i], "--llvm") == 0) {
+            use_llvm = 1;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             usage(argv[0]);
             return 0;
@@ -1358,6 +1362,85 @@ int main(int argc, char **argv) {
     }
 
     /* Phase 4: Code generation */
+    if (use_llvm) {
+        /* LLVM backend */
+        Arena *llvm_arena = arena_create();
+        LlvmCodegen *lc = llvm_create(llvm_arena, target, opt_level);
+        if (!llvm_generate(lc, program)) {
+            fprintf(stderr, "LLVM code generation failed\n");
+            parser_destroy(parser);
+            free(source);
+            arena_destroy(sa_arena);
+            arena_destroy(llvm_arena);
+            return 1;
+        }
+
+        if (stop_after_asm) {
+            /* Emit assembly listing */
+            char asm_path[1024];
+            snprintf(asm_path, sizeof(asm_path), "%s", output_file);
+            if (llvm_emit_assembly(lc, asm_path) != 0) {
+                fprintf(stderr, "LLVM assembly emission failed\n");
+                arena_destroy(llvm_arena);
+                return 1;
+            }
+            if (verbose) printf("Wrote %s\n", asm_path);
+        } else {
+            /* Emit object file */
+            char obj_path[1024];
+            snprintf(obj_path, sizeof(obj_path), "%s.o", output_file);
+            if (llvm_emit_object(lc, obj_path) != 0) {
+                fprintf(stderr, "LLVM object emission failed\n");
+                arena_destroy(llvm_arena);
+                return 1;
+            }
+
+            /* Link with system linker (no segfault helper for LLVM mode yet) */
+            char cmd[4096];
+            snprintf(cmd, sizeof(cmd),
+                "clang -arch x86_64 "
+                "%s -o %s",
+                obj_path, output_file);
+            int link_ret = system(cmd);
+            if (link_ret != 0) {
+                fprintf(stderr, "Linking failed (exit code %d)\n", link_ret);
+                arena_destroy(llvm_arena);
+                return 1;
+            }
+
+            /* Clean up .o file */
+            snprintf(cmd, sizeof(cmd), "rm -f %s", obj_path);
+            system(cmd);
+        }
+
+        if (verbose) printf("LLVM compilation successful\n");
+
+        parser_destroy(parser);
+        free(source);
+        arena_destroy(sa_arena);
+        arena_destroy(llvm_arena);
+
+        if (run_mode) {
+            if (verbose) printf("Running: %s\n", output_file);
+            char cmd[4096];
+            snprintf(cmd, sizeof(cmd), "%s", output_file);
+            int ret = system(cmd);
+            int exit_code = -1;
+            if (WIFEXITED(ret)) {
+                exit_code = WEXITSTATUS(ret);
+            }
+            if (exit_code != 0) {
+                fprintf(stderr, "Program exited with code %d\n", exit_code);
+            }
+            remove(output_file);
+            return exit_code;
+        }
+
+        printf("Compilation successful: %s -> %s\n", input_file, output_file);
+        return 0;
+    }
+
+    /* NASM backend (existing code) */
     Arena *cg_arena = arena_create();
     Codegen *cg = codegen_create(cg_arena);
     codegen_set_target(cg, target);
