@@ -20,7 +20,16 @@ static void c_emit_let(CCodegen *cg, AstNode *node) {
         /* Infer type from value expression */
         int is_str = 0;
         if (value_node->type == NODE_LITERAL_STRING) is_str = 1;
-        if (value_node->type == NODE_BINARY_OP && value_node->data.binary.op == BIN_CONCAT) is_str = 1;
+        if (value_node->type == NODE_BINARY_OP) {
+            if (value_node->data.binary.op == BIN_CONCAT) is_str = 1;
+            if (value_node->data.binary.op == BIN_ADD) {
+                /* Check if either operand is a string */
+                AstNode *l = value_node->data.binary.left;
+                AstNode *r = value_node->data.binary.right;
+                if ((l && l->type == NODE_LITERAL_STRING) ||
+                    (r && r->type == NODE_LITERAL_STRING)) is_str = 1;
+            }
+        }
         if (is_str) {
             fputs("string", cg->out);
         } else if (value_node->type == NODE_LITERAL_FLOAT) {

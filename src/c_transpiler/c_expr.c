@@ -118,9 +118,13 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
         int right_str = is_string_expr(right);
         if (left_str || right_str) {
             fputs("__aether_concat(", cg->out);
+            if (!left_str) fputs("__aether_itoa(", cg->out);
             c_emit_expr(cg, left);
+            if (!left_str) fputc(')', cg->out);
             fputs(", ", cg->out);
+            if (!right_str) fputs("__aether_itoa(", cg->out);
             c_emit_expr(cg, right);
+            if (!right_str) fputc(')', cg->out);
             fputc(')', cg->out);
             return;
         }
@@ -265,7 +269,16 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
 
     for (int i = 0; i < node->data.call.args.count; i++) {
         if (i > 0) fputs(", ", cg->out);
-        c_emit_expr(cg, node->data.call.args.items[i]);
+        AstNode *arg = node->data.call.args.items[i];
+        /* Auto-wrap non-string args to print() with __aether_itoa */
+        if (fname.len == 5 && memcmp(fname.data, "print", 5) == 0 &&
+            !is_string_expr(arg)) {
+            fputs("__aether_itoa(", cg->out);
+            c_emit_expr(cg, arg);
+            fputc(')', cg->out);
+        } else {
+            c_emit_expr(cg, arg);
+        }
     }
     fputc(')', cg->out);
 }
@@ -312,6 +325,43 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
         case NODE_CALL:           c_emit_call(cg, node); break;
         case NODE_INDEX:          c_emit_index(cg, node); break;
         case NODE_FIELD_ACCESS:   c_emit_field_access(cg, node); break;
+        case NODE_MATCH: {
+            /* Match expression: emit as ternary chain.
+             * match val { case p1 -> e1; case p2 -> e2; case _ -> e3 }
+             * → (val) == (p1) ? (e1) : (val) == (p2) ? (e2) : (e3) */
+            AstNode *val = node->data.match_node.value;
+            int arms = node->data.match_node.arms.count;
+            for (int i = 0; i < arms; i++) {
+                AstNode *arm = node->data.match_node.arms.items[i];
+                int is_default = (arm->data.match_arm.pattern &&
+                    arm->data.match_arm.pattern->type == NODE_IDENT &&
+                    arm->data.match_arm.pattern->data.ident.name.len == 1 &&
+                    arm->data.match_arm.pattern->data.ident.name.data[0] == '_');
+                if (!is_default) {
+                    fputs("(", cg->out);
+                    c_emit_expr(cg, val);
+                    fputs(") == (", cg->out);
+                    c_emit_expr(cg, arm->data.match_arm.pattern);
+                    fputs(") ? (", cg->out);
+                    if (arm->data.match_arm.body) c_emit_expr(cg, arm->data.match_arm.body);
+                    fputs(")", cg->out);
+                    if (i < arms - 1) fputs(" : ", cg->out);
+                } else {
+                    if (arm->data.match_arm.body) c_emit_expr(cg, arm->data.match_arm.body);
+                }
+            }
+            break;
+        }
+        case NODE_ARRAY_LIT: {
+            /* Array literal: emit as C compound literal */
+            fputs("{", cg->out);
+            for (int i = 0; i < node->data.array_lit.elements.count; i++) {
+                if (i > 0) fputs(", ", cg->out);
+                c_emit_expr(cg, node->data.array_lit.elements.items[i]);
+            }
+            fputs("}", cg->out);
+            break;
+        }
         default:
             fprintf(stderr, "C: unhandled expression node type %d\n", node->type);
             break;
