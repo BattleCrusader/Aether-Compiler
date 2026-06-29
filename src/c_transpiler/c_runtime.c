@@ -53,4 +53,21 @@ void c_emit_runtime(CCodegen *cg) {
     /* Emit __aether_alloc / __aether_free */
     fputs("static void* __aether_alloc(uint64_t size) { return malloc((size_t)size); }\n", cg->out);
     fputs("static void __aether_free(void *ptr) { free(ptr); }\n\n", cg->out);
+
+    /* Emit __aether_slice_concat — concatenate two slices */
+    fputs("static slice __aether_slice_concat(slice a, slice b) {\n", cg->out);
+    fputs("    if (b.len == 0) return a;\n", cg->out);
+    fputs("    if (a.len == 0) return b;\n", cg->out);
+    fputs("    uint64_t *buf = malloc((a.len + b.len) * 8);\n", cg->out);
+    fputs("    if (!buf) return (slice){ NULL, 0 };\n", cg->out);
+    fputs("    memcpy(buf, a.ptr, a.len * 8);\n", cg->out);
+    fputs("    memcpy(buf + a.len, b.ptr, b.len * 8);\n", cg->out);
+    fputs("    return (slice){ buf, a.len + b.len };\n", cg->out);
+    fputs("}\n\n", cg->out);
+
+    /* Emit __aether_string_eq — compare two strings */
+    fputs("static int __aether_string_eq(string a, string b) {\n", cg->out);
+    fputs("    if (a.len != b.len) return 0;\n", cg->out);
+    fputs("    return memcmp(a.ptr, b.ptr, a.len) == 0;\n", cg->out);
+    fputs("}\n\n", cg->out);
 }
