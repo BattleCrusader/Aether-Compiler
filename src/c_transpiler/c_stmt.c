@@ -55,6 +55,34 @@ static void c_emit_let(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_if(CCodegen *cg, AstNode *node) {
+    /* if let pattern = expr { body } — check optional tag, bind value */
+    if (node->data.if_node.is_if_let) {
+        c_indent(cg);
+        fputs("{\n", cg->out);
+        cg->indent++;
+        c_indent(cg);
+        fputs("uint64_t __iflet_val = ", cg->out);
+        c_emit_expr(cg, node->data.if_node.condition);
+        fputs(";\n", cg->out);
+        c_indent(cg);
+        fputs("if ((__iflet_val & 0xFF) != 0) {\n", cg->out);
+        cg->indent++;
+        /* Bind the pattern variable to the extracted value */
+        if (node->data.if_node.if_let_pattern) {
+            StringView pname = node->data.if_node.if_let_pattern->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "uint64_t %.*s = __iflet_val >> 8;\n", (int)pname.len, pname.data);
+        }
+        c_emit_block(cg, node->data.if_node.then_block);
+        cg->indent--;
+        c_indent(cg);
+        fputs("}\n", cg->out);
+        cg->indent--;
+        c_indent(cg);
+        fputs("}\n", cg->out);
+        return;
+    }
+
     c_indent(cg);
     fputs("if (", cg->out);
     c_emit_expr(cg, node->data.if_node.condition);
@@ -105,9 +133,89 @@ static void c_emit_while(CCodegen *cg, AstNode *node) {
 
 static void c_emit_for(CCodegen *cg, AstNode *node) {
     /* For loop: for var in range/array */
+    AstNode *var = node->data.for_node.var;
+    AstNode *iterable = node->data.for_node.iterable;
+    AstNode *index_var = node->data.for_node.index_var;
+
+    if (!iterable) {
+        c_indent(cg);
+        fputs("// for loop (no iterable)\n", cg->out);
+        c_emit_block(cg, node->data.for_node.body);
+        return;
+    }
+
+    /* Check if iterable is a range: start..end */
+    if (iterable->type == NODE_BINARY_OP &&
+        (iterable->data.binary.op == BIN_RANGE ||
+         iterable->data.binary.op == BIN_RANGE_INCLUSIVE)) {
+        int lbl_start = cg->label_counter++;
+        int lbl_end = cg->label_counter++;
+        c_indent(cg);
+        fputs("{\n", cg->out);
+        cg->indent++;
+        c_indent(cg);
+        fputs("uint64_t __range_start = ", cg->out);
+        c_emit_expr(cg, iterable->data.binary.left);
+        fputs(";\n", cg->out);
+        c_indent(cg);
+        fputs("uint64_t __range_end = ", cg->out);
+        c_emit_expr(cg, iterable->data.binary.right);
+        fputs(";\n", cg->out);
+        c_indent(cg);
+        fprintf(cg->out, "uint64_t __i_%d = __range_start;\n", lbl_start);
+        c_indent(cg);
+        fprintf(cg->out, "while (__i_%d < __range_end) {\n", lbl_start);
+        cg->indent++;
+        if (var) {
+            StringView vname = var->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "uint64_t %.*s = __i_%d;\n", (int)vname.len, vname.data, lbl_start);
+        }
+        if (index_var) {
+            StringView iname = index_var->data.ident.name;
+            c_indent(cg);
+            fprintf(cg->out, "uint64_t %.*s = __i_%d;\n", (int)iname.len, iname.data, lbl_start);
+        }
+        c_emit_block(cg, node->data.for_node.body);
+        cg->indent--;
+        c_indent(cg);
+        fprintf(cg->out, "__i_%d++;\n", lbl_start);
+        c_indent(cg);
+        fputs("}\n", cg->out);
+        cg->indent--;
+        c_indent(cg);
+        fputs("}\n", cg->out);
+        return;
+    }
+
+    /* Array/slice iteration */
     c_indent(cg);
-    fputs("// for loop\n", cg->out);
+    fputs("{\n", cg->out);
+    cg->indent++;
+    c_indent(cg);
+    fputs("slice __arr = ", cg->out);
+    c_emit_expr(cg, iterable);
+    fputs(";\n", cg->out);
+    c_indent(cg);
+    fputs("for (uint64_t __i = 0; __i < __arr.len; __i++) {\n", cg->out);
+    cg->indent++;
+    if (var) {
+        StringView vname = var->data.ident.name;
+        c_indent(cg);
+        fprintf(cg->out, "uint64_t %.*s = ((uint64_t*)__arr.ptr)[__i];\n", (int)vname.len, vname.data);
+    }
+    if (index_var) {
+        StringView iname = index_var->data.ident.name;
+        c_indent(cg);
+        fprintf(cg->out, "uint64_t %.*s = __i;\n", (int)iname.len, iname.data);
+    }
     c_emit_block(cg, node->data.for_node.body);
+    cg->indent--;
+    c_indent(cg);
+    fputs("}\n", cg->out);
+    cg->indent--;
+    c_indent(cg);
+    fputs("}\n", cg->out);
 }
 
 static void c_emit_return(CCodegen *cg, AstNode *node) {

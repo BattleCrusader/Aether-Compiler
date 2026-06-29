@@ -29,6 +29,9 @@ void c_emit_func_prototype(CCodegen *cg, AstNode *node) {
     fputc(' ', cg->out);
 
     /* Emit function name */
+    if (node->data.func.is_sys) {
+        fputs("__aether_sys_", cg->out);
+    }
     fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
 
     /* Emit parameters */
@@ -39,7 +42,11 @@ void c_emit_func_prototype(CCodegen *cg, AstNode *node) {
         StringView pname = param->data.param.name->data.ident.name;
 
         if (param_type) {
-            c_emit_type(cg, param_type);
+            if (param->data.param.is_varargs) {
+                fputs("slice", cg->out);
+            } else {
+                c_emit_type(cg, param_type);
+            }
         } else {
             fputs("uint64_t", cg->out);
         }
@@ -86,6 +93,9 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
     if (is_main) {
         fprintf(cg->out, "main(int argc, char **argv)");
     } else {
+        if (node->data.func.is_sys) {
+            fputs("__aether_sys_", cg->out);
+        }
         fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
         for (int i = 0; i < param_count; i++) {
             if (i > 0) fputs(", ", cg->out);
@@ -94,7 +104,11 @@ void c_emit_func_decl(CCodegen *cg, AstNode *node) {
             StringView pname = param->data.param.name->data.ident.name;
 
             if (param_type) {
-                c_emit_type(cg, param_type);
+                if (param->data.param.is_varargs) {
+                    fputs("slice", cg->out);
+                } else {
+                    c_emit_type(cg, param_type);
+                }
             } else {
                 fputs("uint64_t", cg->out);
             }

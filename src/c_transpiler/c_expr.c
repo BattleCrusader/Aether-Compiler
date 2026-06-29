@@ -84,6 +84,11 @@ static int is_string_expr(AstNode *node) {
     if (!node) return 0;
     if (node->type == NODE_LITERAL_STRING) return 1;
     if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_CONCAT) return 1;
+    /* BIN_ADD with string operand is also string concat */
+    if (node->type == NODE_BINARY_OP && node->data.binary.op == BIN_ADD) {
+        return is_string_expr(node->data.binary.left) ||
+               is_string_expr(node->data.binary.right);
+    }
     if (node->type == NODE_IDENT) {
         AstNode *decl = node->data.ident.resolved;
         if (!decl) return 0;
@@ -227,6 +232,7 @@ static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
             fputs(")))", cg->out);
             break;
         case UNARY_REF:
+        case UNARY_ADDR:
             fputs("(&(", cg->out);
             c_emit_expr(cg, node->data.unary.operand);
             fputs("))", cg->out);
@@ -249,8 +255,12 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     }
 
     StringView fname;
+    AstNode *func_decl = NULL;
     if (node->data.call.callee->type == NODE_IDENT) {
         fname = node->data.call.callee->data.ident.name;
+        if (node->data.call.callee->data.ident.resolved) {
+            func_decl = node->data.call.callee->data.ident.resolved;
+        }
     } else if (node->data.call.callee->type == NODE_FIELD_ACCESS) {
         /* Handle scoped calls like Option::Some(42) — just emit the value */
         c_emit_expr(cg, node->data.call.args.items[0]);
@@ -259,25 +269,88 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
         fprintf(stderr, "C: call with non-ident callee not yet supported\n");
         return;
     }
+
+    /* Prefix sys function names to avoid C library conflicts */
+    if (func_decl && func_decl->data.func.is_sys) {
+        fputs("__aether_sys_", cg->out);
+    }
     fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
 
-    /* Look up the function declaration to check param types */
-    AstNode *func_decl = NULL;
-    if (node->data.call.callee->data.ident.resolved) {
-        func_decl = node->data.call.callee->data.ident.resolved;
+    /* Emit arguments, filling in defaults for omitted optional params */
+
+    int total_params = 0;
+    int varargs_param_idx = -1;
+    if (func_decl) {
+        total_params = func_decl->data.func.params.count;
+        for (int i = 0; i < total_params; i++) {
+            if (func_decl->data.func.params.items[i]->data.param.is_varargs) {
+                varargs_param_idx = i;
+                break;
+            }
+        }
+    }
+    if (total_params == 0) {
+        total_params = (int)node->data.call.args.count;
     }
 
-    for (int i = 0; i < node->data.call.args.count; i++) {
+    int regular_count = (varargs_param_idx >= 0) ? varargs_param_idx : total_params;
+    int vararg_count = (varargs_param_idx >= 0) ? (int)node->data.call.args.count - regular_count : 0;
+
+    /* If variadic, pack extra args into a slice compound literal */
+    if (varargs_param_idx >= 0) {
+        /* Emit regular args first (function name already emitted above) */
+        for (int i = 0; i < regular_count; i++) {
+            if (i > 0) fputs(", ", cg->out);
+            AstNode *arg = node->data.call.args.items[i];
+            if (fname.len == 5 && memcmp(fname.data, "print", 5) == 0 &&
+                !is_string_expr(arg)) {
+                fputs("__aether_itoa(", cg->out);
+                c_emit_expr(cg, arg);
+                fputc(')', cg->out);
+            } else {
+                c_emit_expr(cg, arg);
+            }
+        }
+        if (regular_count > 0) fputs(", ", cg->out);
+        /* Pack variadic args into a slice using compound literal */
+        fputs("(slice){ (uint64_t[]){", cg->out);
+        for (int i = 0; i < vararg_count; i++) {
+            if (i > 0) fputs(", ", cg->out);
+            c_emit_expr(cg, node->data.call.args.items[regular_count + i]);
+        }
+        fprintf(cg->out, "}, %d }", vararg_count);
+        fputs(")", cg->out);
+        return;
+    }
+
+    for (int i = 0; i < total_params; i++) {
         if (i > 0) fputs(", ", cg->out);
-        AstNode *arg = node->data.call.args.items[i];
-        /* Auto-wrap non-string args to print() with __aether_itoa */
-        if (fname.len == 5 && memcmp(fname.data, "print", 5) == 0 &&
-            !is_string_expr(arg)) {
-            fputs("__aether_itoa(", cg->out);
-            c_emit_expr(cg, arg);
-            fputc(')', cg->out);
+        if (func_decl) (void)func_decl->data.func.params.items[i];
+        if (i < (int)node->data.call.args.count) {
+            AstNode *arg = node->data.call.args.items[i];
+            /* Auto-add & for struct args passed to void* params */
+            int needs_ref = 0;
+            if (func_decl && i < func_decl->data.func.params.count) {
+                AstNode *ptype = func_decl->data.func.params.items[i]->data.param.type;
+                if (ptype && (ptype->type == NODE_TYPE_REF || ptype->type == NODE_TYPE_PTR) &&
+                    arg->type == NODE_IDENT) {
+                    needs_ref = 1;
+                }
+            }
+            if (needs_ref) fputs("&(", cg->out);
+            /* Auto-wrap non-string args to print() with __aether_itoa */
+            if (fname.len == 5 && memcmp(fname.data, "print", 5) == 0 &&
+                !is_string_expr(arg)) {
+                fputs("__aether_itoa(", cg->out);
+                c_emit_expr(cg, arg);
+                fputc(')', cg->out);
+            } else {
+                c_emit_expr(cg, arg);
+            }
+            if (needs_ref) fputs(")", cg->out);
         } else {
-            c_emit_expr(cg, arg);
+            /* Omitted optional param — fill with NULL */
+            fputs("(string){ 0, NULL }", cg->out);
         }
     }
     fputc(')', cg->out);
