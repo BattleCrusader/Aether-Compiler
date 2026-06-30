@@ -74,4 +74,9 @@ void c_emit_runtime(CCodegen *cg) {
     fputs("    if (a.len != b.len) return 0;\n", cg->out);
     fputs("    return memcmp(a.data, b.data, a.len) == 0;\n", cg->out);
     fputs("}\n\n", cg->out);
+
+    /* Emit error handling globals — used by try/catch/throw */
+    fputs("int __aether_error_tag = 0;\n", cg->out);
+    fputs("uint64_t __aether_error_value = 0;\n", cg->out);
+    fputs("jmp_buf __aether_jmp_buf;\n\n", cg->out);
 }

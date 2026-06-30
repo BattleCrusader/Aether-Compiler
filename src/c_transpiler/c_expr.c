@@ -718,6 +718,7 @@ static void c_emit_index(CCodegen *cg, AstNode *node) {
 static void c_emit_field_access(CCodegen *cg, AstNode *node) {
     /* Check if target is a pointer type — use -> instead of . */
     int is_ptr = 0;
+    int is_enum_variant = 0;
     if (node->data.field.target && node->data.field.target->type == NODE_IDENT) {
         AstNode *decl = node->data.field.target->data.ident.resolved;
         if (decl) {
@@ -727,12 +728,22 @@ static void c_emit_field_access(CCodegen *cg, AstNode *node) {
             if (type_node && (type_node->type == NODE_TYPE_REF || type_node->type == NODE_TYPE_PTR)) {
                 is_ptr = 1;
             }
+            /* Enum variant access: MyError::NotFound → just emit NotFound */
+            if (decl->type == NODE_ENUM_DECL) {
+                is_enum_variant = 1;
+            }
         }
     }
-    c_emit_expr(cg, node->data.field.target);
-    fputs(is_ptr ? "->" : ".", cg->out);
-    StringView field_name = node->data.field.field->data.ident.name;
-    fprintf(cg->out, "%.*s", (int)field_name.len, field_name.data);
+    if (is_enum_variant) {
+        /* Just emit the variant name directly — C enums don't use type prefix */
+        StringView field_name = node->data.field.field->data.ident.name;
+        fprintf(cg->out, "%.*s", (int)field_name.len, field_name.data);
+    } else {
+        c_emit_expr(cg, node->data.field.target);
+        fputs(is_ptr ? "->" : ".", cg->out);
+        StringView field_name = node->data.field.field->data.ident.name;
+        fprintf(cg->out, "%.*s", (int)field_name.len, field_name.data);
+    }
 }
 
 /* ──────────────────────────────────────────────

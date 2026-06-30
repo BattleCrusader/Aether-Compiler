@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Forward declarations for functions defined in other C modules */
+void c_emit_try(CCodegen *cg, AstNode *node);
+void c_emit_throw(CCodegen *cg, AstNode *node);
+
 /* ──────────────────────────────────────────────
  * Statement codegen — emit C statements
  * ────────────────────────────────────────────── */
@@ -383,6 +387,15 @@ void c_emit_stmt(CCodegen *cg, AstNode *node) {
         case NODE_ASM_BLOCK:
             /* Skip asm blocks in C transpiler — they're NASM-specific.
                The stdlib files with asm blocks are compiled via NASM path. */
+            break;
+        case NODE_TRY:
+            c_emit_try(cg, node);
+            break;
+        case NODE_THROW:
+            c_emit_throw(cg, node);
+            break;
+        case NODE_CATCH_ARM:
+            /* Catch arms are handled inside c_emit_try — skip here */
             break;
         default:
             fprintf(stderr, "C: unhandled statement node type %d\n", node->type);
