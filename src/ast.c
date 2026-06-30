@@ -435,7 +435,7 @@ const char *unaryop_name(UnaryOp op) {
 const char *primtype_name(PrimType pt) {
     switch (pt) {
         case PRIM_VOID: return "void"; case PRIM_BOOL: return "bool"; case PRIM_BYTE: return "byte";
-        case PRIM_U8: return "u8"; case PRIM_U16: return "u16"; case PRIM_U32: return "u32"; case PRIM_U64: return "u64";
+        case PRIM_U8: return "u8"; case PRIM_U16: return "u16"; case PRIM_U32: return "u32"; case PRIM_U64: return "u64"; case PRIM_U128: return "u128";
         case PRIM_I8: return "i8"; case PRIM_I16: return "i16"; case PRIM_I32: return "i32"; case PRIM_I64: return "i64";
         case PRIM_F32: return "f32"; case PRIM_F64: return "f64";
         case PRIM_STRING: return "string";
