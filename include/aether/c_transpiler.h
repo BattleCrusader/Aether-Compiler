@@ -84,4 +84,8 @@ void c_emit_target_preamble(CCodegen *cg);
 void c_emit_target_postamble(CCodegen *cg);
 int c_compile(CCodegen *cg, const char *c_path, const char *output_path);
 
+/* Error handling codegen */
+void c_emit_try(CCodegen *cg, AstNode *node);
+void c_emit_throw(CCodegen *cg, AstNode *node);
+
 #endif /* AETHER_C_TRANSPILER_H */

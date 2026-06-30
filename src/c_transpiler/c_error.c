@@ -32,7 +32,7 @@ void c_emit_throw(CCodegen *cg, AstNode *node) {
         fputs(";\n", cg->out);
     }
     c_indent(cg);
-    fputs("return;\n", cg->out);
+    fputs("longjmp(__aether_jmp_buf, 1);\n", cg->out);
 }
 
 /* ──────────────────────────────────────────────
@@ -44,8 +44,6 @@ void c_emit_try(CCodegen *cg, AstNode *node) {
     c_indent(cg);
     fputs("{\n", cg->out);
     cg->indent++;
-    c_indent(cg);
-    fputs("jmp_buf __aether_jmp_buf;\n", cg->out);
     c_indent(cg);
     fputs("int __aether_try_val = setjmp(__aether_jmp_buf);\n", cg->out);
     c_indent(cg);
