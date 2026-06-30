@@ -2,8 +2,10 @@
 // Tests: basic interpolation, numeric auto-conversion, expressions in braces,
 //        escaped braces, multiple interpolations
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Basic string interpolation with variable
     let name = "World"
     let msg1 = "Hello {name}!"
@@ -36,5 +38,4 @@ func main(): u64 {
     // All these should compile and produce strings
     // We can't easily verify string content without std lib,
     // but we can verify they don't crash
-    return 42
 }

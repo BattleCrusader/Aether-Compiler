@@ -1,8 +1,10 @@
 // test_spec_03_operators_precedence.ae — Section 3.5: Operator Precedence
 // Tests: 14 levels of precedence
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Level 3 (* / %) before Level 4 (+ -)
     let prec_mul_add: u64 = 2 + 3 * 4   // 2 + 12 = 14 (not 20)
     let prec_div_sub: u64 = 10 - 6 / 2  // 10 - 3 = 7 (not 2)
@@ -45,5 +47,4 @@ func main(): u64 {
     if parens == 20 { score = score + 1 }
     if complex == 9 { score = score + 1 }
 
-    return 42
 }

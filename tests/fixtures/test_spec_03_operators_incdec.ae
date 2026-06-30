@@ -1,8 +1,10 @@
 // test_spec_03_operators_incdec.ae — Section 3.4: Prefix/Postfix Increment/Decrement
 // Tests: ++x, x++, --x, x--
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     let mut a: u64 = 5
 
     // Prefix increment: returns new value
@@ -41,5 +43,4 @@ func main(): u64 {
     --c              // c = 7
     if c == 7 { score = score + 1 }
 
-    return 42
 }

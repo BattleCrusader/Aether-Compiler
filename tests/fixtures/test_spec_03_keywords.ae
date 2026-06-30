@@ -9,8 +9,10 @@
 //   super, init, drop, inline, var, module, use, extern, sys, heap,
 //   protocol, dyn, pre, post, u128
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Primitive type keywords
     let a_bool: bool = true
     let a_byte: byte = 255
@@ -67,5 +69,4 @@ func main(): u64 {
     result = result + (MAX - 100)
 
     // return keyword
-    return 42
 }

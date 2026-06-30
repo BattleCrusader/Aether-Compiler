@@ -1,8 +1,10 @@
 // test_spec_03_operators_comparison.ae — Section 3.4: Comparison Operators
 // Tests: ==, !=, <, >, <=, >=
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Equality
     let eq_true: bool = 42 == 42
     let eq_false: bool = 42 == 43
@@ -55,5 +57,4 @@ func main(): u64 {
     if chain { score = score + 1 }
 
     // score should be 17, but we return 42
-    return 42
 }

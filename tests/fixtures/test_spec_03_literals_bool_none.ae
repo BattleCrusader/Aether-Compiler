@@ -1,8 +1,10 @@
 // test_spec_03_literals_bool_none.ae — Section 3.6: Boolean and None Literals
 // Tests: true, false, none
 
-@test(expect=42)
-func main(): u64 {
+import "std/test"
+
+@test
+func main(): void {
     // Boolean literals
     let t: bool = true
     let f: bool = false
@@ -34,5 +36,4 @@ func main(): u64 {
     if not not_f { score = score + 1 }
     if val == 42 { score = score + 1 }
 
-    return 42
 }
