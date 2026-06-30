@@ -1,41 +1,373 @@
-# std/str.ae — String operations: concat, split, trim, to_upper, to_lower
-# Freestanding standard library — stub implementations
+// std/str.ae — String operations
+// Uses Aether's + operator for string concatenation.
+// strEq uses Aether string indexing (no asm needed).
 
-func concat(a: string, b: string): string {
-    asm {
-        ; concatenate two strings, return new string in rax
-        xor rax, rax
-    }
+func concat(firstString: string, secondString: string): string {
+    return firstString + secondString
 }
 
-func split(s: string, delimiter: string): [string] {
-    asm {
-        ; split string by delimiter, return pointer to slice
-        xor rax, rax
+func stringLength(inputString: string): u64 {
+    let mut i: u64 = 0
+    while true {
+        let c: byte = inputString[i]
+        if c == 0 { return i }
+        i = i + 1
     }
+    return i
 }
 
-func trim(s: string): string {
-    asm {
-        ; trim leading/trailing whitespace
-        xor rax, rax
-    }
+func stringCompare(a: string, b: string): bool {
+    return strEq(a, b)
 }
 
-func to_upper(s: string): string {
-    asm {
-        ; convert to uppercase
-        xor rax, rax
+func split(inputString: string, delimiter: string): [string] {
+    let mut result: [string] = []
+    let inputLen: u64 = stringLength(inputString)
+    let delimLen: u64 = stringLength(delimiter)
+    if delimLen == 0 {
+        let mut i: u64 = 0
+        while i < inputLen {
+            let mut part: string = ""
+            part = part + inputString[i]
+            result = result + [part]
+            i = i + 1
+        }
+        return result
     }
+    let mut start: u64 = 0
+    let mut pos: u64 = 0
+    while pos < inputLen {
+        let mut matches: bool = true
+        let mut di: u64 = 0
+        while di < delimLen {
+            if inputString[pos + di] != delimiter[di] { matches = false }
+            di = di + 1
+        }
+        if matches {
+            let mut part: string = ""
+            let mut si: u64 = start
+            while si < pos {
+                part = part + inputString[si]
+                si = si + 1
+            }
+            result = result + [part]
+            pos = pos + delimLen
+            start = pos
+        } else {
+            pos = pos + 1
+        }
+    }
+    let mut part: string = ""
+    let mut si: u64 = start
+    while si < inputLen {
+        part = part + inputString[si]
+        si = si + 1
+    }
+    result = result + [part]
+    return result
 }
 
-func to_lower(s: string): string {
-    asm {
-        ; convert to lowercase
-        xor rax, rax
+func trim(inputString: string): string {
+    let len: u64 = stringLength(inputString)
+    let mut start: u64 = 0
+    while start < len {
+        let c: byte = inputString[start]
+        if c != 32 and c != 9 and c != 10 and c != 13 { break }
+        start = start + 1
     }
+    if start == len { return "" }
+    let mut end: u64 = len
+    while end > start {
+        let c: byte = inputString[end - 1]
+        if c != 32 and c != 9 and c != 10 and c != 13 { break }
+        end = end - 1
+    }
+    let mut result: string = ""
+    let mut i: u64 = start
+    while i < end {
+        result = result + inputString[i]
+        i = i + 1
+    }
+    return result
 }
 
-func main(): u64 {
-    return 0
+func toUpper(inputString: string): string {
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while true {
+        let c: byte = inputString[i]
+        if c == 0 { return result }
+        if c >= 97 and c <= 122 {
+            let upper: byte = c - 32
+            result = result + upper
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
+}
+
+func toLower(inputString: string): string {
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while true {
+        let c: byte = inputString[i]
+        if c == 0 { return result }
+        if c >= 65 and c <= 90 {
+            let lower: byte = c + 32
+            result = result + lower
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// strEq(a: string, b: string): bool
+// Returns true if both strings contain the same characters.
+// Pure Aether using string indexing — no asm needed.
+func strEq(a: string, b: string): bool {
+    let i: u64 = 0
+    while true {
+        let ca: byte = a[i]
+        let cb: byte = b[i]
+        if ca != cb { return false }
+        if ca == 0 { return true }
+        i = i + 1
+    }
+    return true
+}
+
+func substring(inputString: string, startIndex: u64, endIndex: u64): string {
+    let mut result: string = ""
+    let mut i: u64 = startIndex
+    while i < endIndex {
+        result = result + inputString[i]
+        i = i + 1
+    }
+    return result
+}
+
+func startsWith(inputString: string, prefix: string): bool {
+    let prefixLen: u64 = stringLength(prefix)
+    let mut i: u64 = 0
+    while i < prefixLen {
+        if inputString[i] != prefix[i] { return false }
+        i = i + 1
+    }
+    return true
+}
+
+func endsWith(inputString: string, suffix: string): bool {
+    let inputLen: u64 = stringLength(inputString)
+    let suffixLen: u64 = stringLength(suffix)
+    if suffixLen > inputLen { return false }
+    let mut i: u64 = 0
+    while i < suffixLen {
+        if inputString[inputLen - suffixLen + i] != suffix[i] { return false }
+        i = i + 1
+    }
+    return true
+}
+
+func contains(haystack: string, needle: string): bool {
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
+    if needleLen == 0 { return true }
+    if needleLen > hayLen { return false }
+    let mut i: u64 = 0
+    while i <= hayLen - needleLen {
+        let mut matches: bool = true
+        let mut j: u64 = 0
+        while j < needleLen {
+            if haystack[i + j] != needle[j] { matches = false; break }
+            j = j + 1
+        }
+        if matches { return true }
+        i = i + 1
+    }
+    return false
+}
+
+func replace(inputString: string, searchFor: string, replaceWith: string): string {
+    let inputLen: u64 = stringLength(inputString)
+    let searchLen: u64 = stringLength(searchFor)
+    if searchLen == 0 { return inputString }
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while i < inputLen {
+        let mut matches: bool = true
+        let mut j: u64 = 0
+        while j < searchLen {
+            if i + j >= inputLen { matches = false; break }
+            if inputString[i + j] != searchFor[j] { matches = false; break }
+            j = j + 1
+        }
+        if matches {
+            let mut ri: u64 = 0
+            let replaceLen: u64 = stringLength(replaceWith)
+            while ri < replaceLen {
+                result = result + replaceWith[ri]
+                ri = ri + 1
+            }
+            i = i + searchLen
+        } else {
+            result = result + inputString[i]
+            i = i + 1
+        }
+    }
+    return result
+}
+
+func join(strings: [string], delimiter: string): string {
+    let mut result: string = ""
+    let count: u64 = #strings
+    if count == 0 { return result }
+    let mut i: u64 = 0
+    while i < count {
+        if i > 0 {
+            let mut di: u64 = 0
+            let delimLen: u64 = stringLength(delimiter)
+            while di < delimLen {
+                result = result + delimiter[di]
+                di = di + 1
+            }
+        }
+        let itemLen: u64 = stringLength(strings[i])
+        let mut j: u64 = 0
+        while j < itemLen {
+            result = result + strings[i][j]
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// --- New functions ---
+
+func reverse(inputString: string): string {
+    let len: u64 = stringLength(inputString)
+    let mut result: string = ""
+    let mut i: u64 = len
+    while i > 0 {
+        i = i - 1
+        result = result + inputString[i]
+    }
+    return result
+}
+
+func repeat(inputString: string, count: u64): string {
+    let mut result: string = ""
+    let mut i: u64 = 0
+    while i < count {
+        result = result + inputString
+        i = i + 1
+    }
+    return result
+}
+
+func count(haystack: string, needle: string): u64 {
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
+    if needleLen == 0 or needleLen > hayLen { return 0 }
+    let mut result: u64 = 0
+    let mut i: u64 = 0
+    while i <= hayLen - needleLen {
+        let mut matches: bool = true
+        let mut j: u64 = 0
+        while j < needleLen {
+            if haystack[i + j] != needle[j] { matches = false; break }
+            j = j + 1
+        }
+        if matches {
+            result = result + 1
+            i = i + needleLen
+        } else {
+            i = i + 1
+        }
+    }
+    return result
+}
+
+func indexOf(haystack: string, needle: string): i64 {
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
+    if needleLen == 0 or needleLen > hayLen { return -1 }
+    let mut i: u64 = 0
+    while i <= hayLen - needleLen {
+        let mut matches: bool = true
+        let mut j: u64 = 0
+        while j < needleLen {
+            if haystack[i + j] != needle[j] { matches = false; break }
+            j = j + 1
+        }
+        if matches { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+func lastIndexOf(haystack: string, needle: string): i64 {
+    let hayLen: u64 = stringLength(haystack)
+    let needleLen: u64 = stringLength(needle)
+    if needleLen == 0 or needleLen > hayLen { return -1 }
+    let mut i: u64 = hayLen - needleLen
+    while true {
+        let mut matches: bool = true
+        let mut j: u64 = 0
+        while j < needleLen {
+            if haystack[i + j] != needle[j] { matches = false; break }
+            j = j + 1
+        }
+        if matches { return i }
+        if i == 0 { return -1 }
+        i = i - 1
+    }
+    return -1
+}
+
+func padLeft(inputString: string, totalLength: u64, padCharacter: byte): string {
+    let len: u64 = stringLength(inputString)
+    if len >= totalLength { return inputString }
+    let mut result: string = ""
+    let mut i: u64 = 0
+    let padCount: u64 = totalLength - len
+    while i < padCount {
+        result = result + padCharacter
+        i = i + 1
+    }
+    result = result + inputString
+    return result
+}
+
+func padRight(inputString: string, totalLength: u64, padCharacter: byte): string {
+    let len: u64 = stringLength(inputString)
+    if len >= totalLength { return inputString }
+    let mut result: string = inputString
+    let mut i: u64 = 0
+    let padCount: u64 = totalLength - len
+    while i < padCount {
+        result = result + padCharacter
+        i = i + 1
+    }
+    return result
+}
+
+func isAlpha(character: byte): bool {
+    return (character >= 65 and character <= 90) or (character >= 97 and character <= 122)
+}
+
+func isDigit(character: byte): bool {
+    return character >= 48 and character <= 57
+}
+
+func isAlnum(character: byte): bool {
+    return isAlpha(character) or isDigit(character)
+}
+
+func isSpace(character: byte): bool {
+    return character == 32 or character == 9 or character == 10 or character == 13
 }

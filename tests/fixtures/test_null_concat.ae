@@ -1,7 +1,9 @@
-# test_null_concat.ae — test that string concat handles null pointers
+// test_null_concat.ae — test that string concat handles null pointers
+import "std/test"
+
 @test
-func main(): u64 {
-    # Test 1: concat with null (no args passed = null string)
+func main(): void {
+    // Test 1: concat with null (no args passed = null string)
     print("hello \n")
-    return 0
+    assertTrue(true, "null concat compiled and ran")
 }

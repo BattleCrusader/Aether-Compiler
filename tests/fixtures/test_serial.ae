@@ -1,0 +1,29 @@
+// test_serial.ae — comprehensive tests for std/serial.ae
+// Tests: com1Port constant, initSerial, writeSerialByte, writeSerialString, readSerialByte
+// Note: Serial I/O requires hardware access (kernel mode).
+//       These tests verify the functions exist and don't crash in user mode.
+
+import "std/test"
+import "std/serial"
+
+@test
+func main() {
+    // com1Port constant
+    assertEquals(com1Port, 0x3F8, "com1Port constant")
+
+    // initSerial - verify function exists (will likely fail in user mode)
+    let initialized: bool = initSerial()
+    assertTrue(true, "initSerial function exists and can be called")
+
+    // writeSerialByte - verify function exists
+    writeSerialByte(65)
+    assertTrue(true, "writeSerialByte function exists and can be called")
+
+    // writeSerialString - verify function exists
+    writeSerialString("hello")
+    assertTrue(true, "writeSerialString function exists and can be called")
+
+    // readSerialByte - verify function exists
+    let byte: byte = readSerialByte()
+    assertTrue(true, "readSerialByte function exists and can be called")
+}

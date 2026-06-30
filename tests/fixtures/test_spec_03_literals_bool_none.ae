@@ -1,0 +1,37 @@
+// test_spec_03_literals_bool_none.ae — Section 3.6: Boolean and None Literals
+// Tests: true, false, none
+
+import "std/test"
+
+@test
+func main(): void {
+    // Boolean literals
+    let t: bool = true
+    let f: bool = false
+
+    // Boolean operations with literals
+    let and_t: bool = true and true
+    let and_f: bool = true and false
+    let or_t: bool = false or true
+    let or_f: bool = false or false
+    let not_t: bool = not false
+    let not_f: bool = not true
+
+    // None literal
+    let n: u64? = none
+    let p: string? = none
+
+    // None with or default
+    let val: u64 = n or 42
+
+    // Verify with assertions
+    assertTrue(t, "true literal should be true")
+    assertTrue(not f, "false literal should be false")
+    assertTrue(and_t, "true and true should be true")
+    assertTrue(not and_f, "true and false should be false")
+    assertTrue(or_t, "false or true should be true")
+    assertTrue(not or_f, "false or false should be false")
+    assertTrue(not_t, "not false should be true")
+    assertTrue(not not_f, "not true should be false")
+    assertEquals(42, val, "none or 42 should be 42")
+}

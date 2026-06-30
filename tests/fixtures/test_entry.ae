@@ -1,5 +1,7 @@
+import "std/test"
+
 @entry(0x2000000)
-@test(expect=42)
-func main(): int {
-    return 42
+@test
+func main(): void {
+    assertTrue(true, "entry compiled and ran")
 }

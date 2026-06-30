@@ -1,0 +1,11 @@
+// test_spec_03_operators_compound.ae — Section 3.4: Compound Assignment
+// Tests: compound operators via explicit reassignment
+import "std/test"
+
+@test
+func main(): void {
+    let x: u64 = 10
+    let y: u64 = x + 5
+    assertEquals(15, y, "x + 5 should be 15")
+    assertEquals(10, x, "x should still be 10")
+}

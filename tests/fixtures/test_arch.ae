@@ -1,0 +1,26 @@
+// test_arch.ae — comprehensive tests for std/arch.ae
+// Tests: detectArchitecture, architecture constants
+
+import "std/test"
+import "std/arch"
+
+@test
+func main() {
+    // architecture constants
+    assertEquals(architectureX8664, 0, "architectureX8664 constant")
+    assertEquals(architectureArm64, 1, "architectureArm64 constant")
+    assertEquals(architectureRiscv64, 2, "architectureRiscv64 constant")
+
+    // detectArchitecture - should return a valid architecture ID
+    let arch: u64 = detectArchitecture()
+    assertTrue(arch == architectureX8664 or arch == architectureArm64 or arch == architectureRiscv64,
+               "detectArchitecture returns valid architecture")
+
+    // cache line constants
+    assertEquals(cacheLineX8664, 64, "cacheLineX8664 constant")
+    assertEquals(cacheLineArm64, 64, "cacheLineArm64 constant")
+    assertEquals(cacheLineRiscv64, 64, "cacheLineRiscv64 constant")
+
+    // page size constant
+    assertEquals(pageSize, 4096, "pageSize constant")
+}

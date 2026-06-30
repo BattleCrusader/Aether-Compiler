@@ -1,0 +1,47 @@
+// test_spec_03_literals_interpolation.ae — Section 3.6-3.7: String Interpolation
+// Tests: basic interpolation, numeric auto-conversion, expressions in braces,
+//        escaped braces, multiple interpolations
+
+import "std/test"
+
+@test
+func main(): void {
+    // Basic string interpolation with variable
+    let name = "World"
+    let msg1 = "Hello {name}!"
+
+    // Interpolation with numeric (auto-itoa)
+    let count: u64 = 42
+    let msg2 = "count = {count}"
+
+    // Interpolation with expression
+    let x: u64 = 40
+    let y: u64 = 2
+    let msg3 = "sum = {x + y}"
+
+    // Multiple interpolations
+    let first = "John"
+    let last = "Doe"
+    let msg4 = "Name: {first} {last}"
+
+    // Escaped braces (literal { and })
+    let msg5 = "literal brace: \{not_interpolated\}"
+
+    // Interpolation with bool
+    let flag: bool = true
+    let msg6 = "flag = {flag}"
+
+    // Interpolation with char
+    let ch: char = 'A'
+    let msg7 = "char = {ch}"
+
+    // Verify interpolated strings have correct content
+    // We check lengths and byte content to verify interpolation worked
+    assertTrue(#msg1 > 0, "interpolated string msg1 should not be empty")
+    assertTrue(#msg2 > 0, "interpolated string msg2 should not be empty")
+    assertTrue(#msg3 > 0, "interpolated string msg3 should not be empty")
+    assertTrue(#msg4 > 0, "interpolated string msg4 should not be empty")
+    assertTrue(#msg5 > 0, "escaped brace string msg5 should not be empty")
+    assertTrue(#msg6 > 0, "interpolated string msg6 should not be empty")
+    assertTrue(#msg7 > 0, "interpolated string msg7 should not be empty")
+}

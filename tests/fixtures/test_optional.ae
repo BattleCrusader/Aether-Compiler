@@ -1,5 +1,7 @@
+import "std/test"
+
 @test
-func main(): u64 {
+func main(): void {
     let x: u64? = none
-    return 0
+    assertTrue(true, "optional compiled and ran")
 }

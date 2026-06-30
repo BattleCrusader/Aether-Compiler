@@ -1,26 +1,28 @@
-# std/test.ae — Testing: assert, test runner
-# Freestanding standard library for host-native tests
-#
-# A test case is just an assertEquals call:
-#   assertEquals(2 + 3, 5, "2 + 3 should be 5")
-#
-# If the assertion fails, the process exits immediately with code 1
-# (like JUnit throwing an AssertionError). If it passes, execution continues.
+// std/test.ae — Testing: assertEquals, assertTrue
+// JUnit-style assertions. Tracks all failures in a global counter.
+// The test function should return __test_failures.
 
-# Assert that a == b. Prints PASS or FAIL. Exits with code 1 on failure.
-func assertEquals(a: u64, b: u64, message: string) {
-    if a != b {
-        print("  FAIL: {message} (got {a}, expected {b})\n")
-        exit(1)
+import "std/io"
+
+let mut __test_failures: u64 = 0
+
+func assertEquals(expectedValue: u64, actualValue: u64, message: string?) {
+    if actualValue != expectedValue {
+        print("  FAIL: {message} (got {actualValue}, expected {expectedValue})\n")
+        __test_failures += 1
     }
-    print("  PASS: {message}\n")
 }
 
-# Assert that condition is true. Prints PASS or FAIL. Exits with code 1 on failure.
-func assertTrue(condition: bool, message: string) {
+func assertDoNotEquals(expectedValue: u64, actualValue: u64, message: string?) {
+    if actualValue == expectedValue {
+        print("  FAIL: {message} (got {actualValue}, expected {expectedValue})\n")
+        __test_failures += 1
+    }
+}
+
+func assertTrue(condition: bool, message: string?) {
     if !condition {
         print("  FAIL: {message}\n")
-        exit(1)
+        __test_failures += 1
     }
-    print("  PASS: {message}\n")
 }

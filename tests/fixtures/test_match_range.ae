@@ -1,0 +1,16 @@
+// test_match_range.ae — test match range patterns
+func classify(x: u64): u64 {
+    return match x {
+        case 1..5 -> 10
+        case 6..10 -> 20
+        case _ -> 0
+    }
+}
+
+func main(): u64 {
+    let r1 = classify(3)
+    let r2 = classify(7)
+    let r3 = classify(0)
+    let r4 = classify(99)
+    return r1 + r2 + r3 + r4
+}

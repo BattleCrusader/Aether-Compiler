@@ -1,0 +1,60 @@
+// test_spec_04_primitives.ae — Section 4.1: Primitive Types
+// Tests: void, bool, byte, u8-u64, i8-i64, f32, f64, string
+// Tests all type sizes and value ranges
+
+import "std/test"
+
+@test
+func main(): void {
+    // Unsigned integers — all sizes
+    let u8_val: u8 = 200
+    let u16_val: u16 = 40000
+    let u32_val: u32 = 3000000
+    let u64_val: u64 = 50000000000
+
+    // Signed integers — all sizes
+    let i8_pos: i8 = 100
+    let i8_neg: i8 = -100
+    let i16_pos: i16 = 20000
+    let i16_neg: i16 = -20000
+    let i32_pos: i32 = 2000000
+    let i32_neg: i32 = -2000000
+    let i64_pos: i64 = 40000000000
+    let i64_neg: i64 = -40000000000
+
+    // Boolean
+    let bool_t: bool = true
+    let bool_f: bool = false
+
+    // Byte (u8 alias)
+    let byte_val: byte = 0xFF
+
+    // String
+    let str_val: string = "hello"
+
+    // Float types
+    let f32_val: f32 = 3.14
+    let f64_val: f64 = 3.141592653589793
+
+    // Type casting between primitives
+    let u8_from_u64: u8 = u64_val as u8   // truncation
+    let u64_from_u8: u64 = u8_val as u64  // zero-extend
+    let i64_from_u64: i64 = u64_val as i64  // same bits, different interpretation
+
+    // Arithmetic with mixed sizes (all promote to u64/i64 in expressions)
+    let mixed_sum: u64 = u8_val + u16_val + u32_val
+    // 200 + 40000 + 3000000 = 3040200
+
+    // Verify with assertions
+    assertEquals(200, u8_val as u64, "u8_val should be 200")
+    assertEquals(40000, u16_val as u64, "u16_val should be 40000")
+    assertEquals(3000000, u32_val as u64, "u32_val should be 3000000")
+    assertEquals(50000000000, u64_val, "u64_val should be 50000000000")
+    assertEquals(100, i8_pos as i64, "i8_pos should be 100")
+    assertEquals(-100, i8_neg as i64, "i8_neg should be -100")
+    assertTrue(bool_t, "bool_t should be true")
+    assertTrue(not bool_f, "bool_f should be false")
+    assertEquals(0xFF, byte_val as u64, "byte_val should be 0xFF")
+    assertEquals(200, u64_from_u8, "u64_from_u8 should be 200")
+    assertEquals(3040200, mixed_sum, "mixed_sum should be 3040200")
+}

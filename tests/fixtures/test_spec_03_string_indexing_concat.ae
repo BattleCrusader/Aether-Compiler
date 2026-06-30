@@ -1,0 +1,38 @@
+// test_spec_03_string_indexing_concat.ae — Section 3.5: String Indexing and Concatenation
+// Tests: s[i] returns byte, string+string=concat, string+number=auto-itoa, number+number=add
+
+import "std/test"
+
+@test
+func main(): void {
+    // String indexing returns byte (u8)
+    let s: string = "hello"
+    let b0: u8 = s[0]  // 'h' = 0x68
+    let b1: u8 = s[1]  // 'e' = 0x65
+    let b2: u8 = s[2]  // 'l' = 0x6C
+    let b3: u8 = s[3]  // 'l' = 0x6C
+    let b4: u8 = s[4]  // 'o' = 0x6F
+
+    // String + String = concatenation
+    let concat_ss: string = "hello " + "world"
+
+    // String + Number = auto-itoa conversion
+    let concat_sn: string = "value: " + 42
+
+    // Number + String = auto-itoa conversion
+    let concat_ns: string = 42 + " is the answer"
+
+    // Number + Number = numeric addition (not concat)
+    let add_nn: u64 = 42 + 1  // 43
+
+    // Verify with assertions
+    assertEquals(0x68, b0 as u64, "s[0] should be 0x68 ('h')")
+    assertEquals(0x65, b1 as u64, "s[1] should be 0x65 ('e')")
+    assertEquals(0x6C, b2 as u64, "s[2] should be 0x6C ('l')")
+    assertEquals(0x6C, b3 as u64, "s[3] should be 0x6C ('l')")
+    assertEquals(0x6F, b4 as u64, "s[4] should be 0x6F ('o')")
+    assertEquals(43, add_nn, "42 + 1 should be 43")
+    assertTrue(#concat_ss > 0, "string concatenation should produce non-empty string")
+    assertTrue(#concat_sn > 0, "string + number should produce non-empty string")
+    assertTrue(#concat_ns > 0, "number + string should produce non-empty string")
+}

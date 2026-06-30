@@ -1,7 +1,7 @@
 # Aether Language Specification
 
 **Version**: 1.0 (Comprehensive)
-**Status**: Living Document — Updated 2026-06-22
+**Status**: Living Document — Last updated: 2026-06-29
 
 ---
 
@@ -30,12 +30,9 @@
 21. [Standard Library](#21-standard-library)
 22. [Build System](#22-build-system)
 23. [Compiler Targets](#23-compiler-targets)
-24. [Think Outside the Box: Unique Aether Innovations](#24-think-outside-the-box-unique-aether-innovations)
+24. [Future & Aspirational Features](#24-future--aspirational-features)
 25. [Concurrency and Fibers](#25-concurrency-and-fibers)
-26. [Advanced OS Integration](#26-advanced-os-integration)
-27. [Goal-Oriented I/O and Query Fusion](#27-goal-oriented-io-and-query-fusion)
-28. [Protocol Generation and Hardware Configuration](#28-protocol-generation-and-hardware-configuration)
-29. [Module System and Imports](#29-module-system-and-imports)
+26. [Module System and Imports](#26-module-system-and-imports)
 
 ---
 
@@ -112,7 +109,12 @@ aether run hello.ae
 /* Block comment */
 
 /* Nested /* block */ comments */
+
+/// Documentation comment — attached to the next declaration
+/// These are used by the `aether doc` tool to generate API docs
 ```
+
+**Documentation comments** (`///`) are attached to the declaration that follows them. They are collected by the documentation generator (`aether doc`). Unlike regular comments, doc comments are associated with specific declarations (functions, types, constants, modules) and can include markdown formatting.
 
 ### 3.2 Identifiers
 
@@ -129,33 +131,125 @@ PascalCase     // valid
 ### 3.3 Keywords
 
 ```
-and         as          bool        break       catch
-class       const       continue    defer       dyn
-elif        else        enum        export      extern
-false       for         func        heap        if
-if          impl        import      in          inline
-internal    let         module      mut         none
-not         or          owned       pool        post
-pre         private     protocol    pub         rc
-ref         region      return      self        struct
-sys         throw       trait       true        try
-type        u8          u16         u32         u64
-u128        while
+and         as          bool        break       byte
+catch       char        class       const       continue
+defer       double      dyn         elif        else
+enum        export      extern      false       float
+for         func        heap        i8          i16
+i32         i64         if          impl        import
+in          init        inline      int         internal
+let         module      mut         none        not
+or          owned       pool        post        pre
+private     protocol    pub         ptr         rc
+ref         region      return      self        static
+string      struct      super       sys         throw
+trait       true        try         type        u8
+u16         u32         u64         u128        unsafe
+use         var         void        while       yield
 ```
+
+> **Note:** `int`, `float`, `double`, and `char` are type aliases (see §4.3). `void` is a zero-sized type used for functions with no return value. `none` is the null value for optional types. `true` and `false` are boolean literals. `self` is the implicit method receiver. `init` and `drop` are special method names for constructors and destructors.
 
 ### 3.4 Operators
 
 ```aether
-Arithmetic:     +   -   *   /   %   **
+Arithmetic:     +   -   *   /   %
 Comparison:     ==  !=  <   >   <=  >=
-Logical:        &&  ||  !
+Logical:        &&  ||  !   and or not
 Bitwise:        &   |   ^   <<  >>
 Assignment:     =   +=  -=  *=  /=  %=  &=  |=  ^=  <<=  >>=
 Member:         .   ->
 Scope:          ::
-Arrow:          =>
-Range:          ..
+Arrow:          ->
+Range:          ..  ..=
+Array length:   #   (prefix operator, e.g. #arrayName)
 Pattern:        |   ..=
+```
+
+> **Array length `#`**: The `#` prefix operator returns the length of an array (the first 8 bytes of the array's header). At codegen time, it reads `[array_ptr]` to get the stored count. Supported for array literals, array-typed variables, and dynamic arrays.
+
+**Short-circuit evaluation**: The logical operators `&&`, `||`, `and`, and `or` use short-circuit evaluation. If the left operand determines the result, the right operand is not evaluated:
+
+```aether
+let a = false and expensive()   // expensive() never called
+let b = true or expensive()     // expensive() never called
+```
+
+This is guaranteed behavior — the compiler never evaluates the right side when the left side is sufficient. This applies to both symbolic (`&&`, `||`) and keyword (`and`, `or`) forms.
+
+**Compound assignment operators** (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`): These operators modify a variable in place. The codegen evaluates the left operand to get the current value, applies the operation with the right operand, and stores the result back. Supported for all numeric and bitwise operation combinations.
+
+**Prefix/postfix increment and decrement** (`++x`, `x++`, `--x`, `x--`): Both prefix and postfix forms are supported. The parser creates `UNARY_INC` and `UNARY_DEC` nodes, and codegen emits `inc`/`dec` instructions. Prefix form returns the incremented value; postfix form returns the original value.
+
+```aether
+let mut x: u64 = 5
+x += 3           // x = 8  (compound add)
+x *= 2           // x = 16  (compound mul)
+++x              // x = 17  (prefix increment)
+let y = x++      // y = 17, x = 18  (postfix increment)
+```
+
+**Bitwise operators** (`&`, `|`, `^`, `~`, `<<`, `>>`): Full bitwise operations are supported in the parser and codegen. The `~` prefix operator creates `UNARY_BIT_NOT` nodes. All operations are evaluated at compile time when operands are constants.
+
+```aether
+let flags: u64 = 0b1010
+let mask: u64 = 0b1100
+let and = flags & mask   // 0b1000
+let or  = flags | mask   // 0b1110
+let xor = flags ^ mask   // 0b0110
+let not = ~flags         // bitwise NOT
+let shl = flags << 2     // 0b101000
+let shr = flags >> 1     // 0b0101
+```
+
+**Logical keyword operators** (`and`, `or`, `not`): These keyword operators are synonyms for `&&`, `||`, and `!`. They are treated identically in the parser and generated the same code. The tokenizer emits `TOKEN_KW_AND`, `TOKEN_KW_OR`, `TOKEN_KW_NOT` which the parser maps to `BIN_AND`, `BIN_OR`, and `UNARY_NOT`.
+
+```aether
+let a = true and false   // false (same as &&)
+let b = true or false    // true  (same as ||)
+let c = not true         // false (same as !)
+```
+
+**Range expressions** (`..` and `..=`): Range expressions are used in `for` loops and match range patterns. `a..b` creates a half-open range `[a..b)`, while `a..=b` creates an inclusive range `[a..b]`. The parser creates `BIN_RANGE` and `BIN_RANGE_INCLUSIVE` nodes.
+
+```aether
+for i in 0..10 { }       // 0 through 9
+for i in 0..=10 { }      // 0 through 10
+match x { case 1..9 -> ... }  // range pattern
+```
+
+### 3.5 Operator Precedence
+
+Operators are evaluated in the following order, from highest to lowest precedence:
+
+| Level | Operators | Associativity | Description |
+|-------|-----------|---------------|-------------|
+| 1 (highest) | `()` `[]` `.` `::` `->` | Left-to-right | Call, index, member access, scope, arrow |
+| 2 | `#` `~` `!` `not` `-` (unary) `++` `--` (prefix) | Right-to-left | Prefix operators |
+| 3 | `*` `/` `%` | Left-to-right | Multiplicative |
+| 4 | `+` `-` | Left-to-right | Additive |
+| 5 | `<<` `>>` | Left-to-right | Bitwise shift |
+| 6 | `&` | Left-to-right | Bitwise AND |
+| 7 | `^` | Left-to-right | Bitwise XOR |
+| 8 | `\|` | Left-to-right | Bitwise OR |
+| 9 | `..` `..=` | Left-to-right | Range |
+| 10 | `==` `!=` `<` `>` `<=` `>=` | Left-to-right | Comparison |
+| 11 | `&&` `and` | Left-to-right | Logical AND |
+| 12 | `\|\|` `or` | Left-to-right | Logical OR |
+| 13 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right-to-left | Assignment |
+| 14 (lowest) | `->` (arrow) | Right-to-left | Expression body |
+
+**Notes:**
+- Postfix `++` and `--` have the same precedence as level 1 (evaluated before prefix operators).
+- The `not` keyword operator has the same precedence as `!`.
+- The `and`/`or` keyword operators have the same precedence as `&&`/`||`.
+- Assignment operators are right-associative: `a = b = c` parses as `a = (b = c)`.
+
+**String indexing**: Strings can be indexed with `[]` to access individual bytes. When `s[i]` is used on a string-typed expression, the codegen returns a single byte (u8) at the given position.
+
+```aether
+let s = \"hello\"
+let b = s[0]   // 'h' (byte 0x68)
 ```
 
 **String Concatenation with `+`**: The `+` operator is overloaded at the language level. When either operand is a string, `+` performs string concatenation instead of numeric addition. This is detected at codegen time by the `is_string_expr()` helper.
@@ -178,7 +272,7 @@ When string concat is detected, the codegen:
 2. Pushes both operands and calls `__aether_concat`
 3. Returns the new string pointer in `rax`
 
-### 3.5 Literals
+### 3.6 Literals
 
 ```aether
 // Integer literals
@@ -186,10 +280,12 @@ When string concat is detected, the codegen:
 0xFF            // hexadecimal
 0o77            // octal
 0b1010          // binary
+1_000_000       // digit separators (underscores ignored)
 
 // Float literals
 3.14
 1.0e-5
+1_000.5         // digit separators in floats
 
 // String literals
 "hello, world"
@@ -202,15 +298,17 @@ let n: u64 = 42
 let s = "count = {n}"           // "count = 42" (auto-converted via __aether_itoa)
 let sum = "total: {x + y}"      // expressions work too
 
+// Escaping braces in string interpolation
+let s = "literal brace: \{not_interpolated\}"  // \{ and \} produce literal { and }
+
 // Multi-line strings
-"""
-This is a
-multi-line string
-"""
+// Use string concatenation or interpolation instead.
+// """ ... """ syntax is reserved for future implementation.
 
 // Character literals
 'a'
 '\n'
+'\x41'          // hex escape in char
 
 // Boolean literals
 true
@@ -220,7 +318,9 @@ false
 none
 ```
 
-### 3.6 String Interpolation
+> **Digit separators**: Underscores (`_`) in numeric literals are ignored by the compiler. They exist only for readability: `1_000_000`, `0xFF_FF_FF_FF`, `0b1010_0101`. Multiple underscores are allowed but not between the prefix (`0x`, `0b`, `0o`) and the first digit.
+
+### 3.7 String Interpolation
 
 String interpolation is a first-class language feature, not a library function. When the parser encounters `{expr}` inside a string literal, it:
 
@@ -262,7 +362,7 @@ The `__aether_itoa(rdi: u64) -> rax: ptr` function:
 
 **Note**: `__aether_itoa` clobbers `rcx` (uses `div rcx`), so callers must save `rcx` before calling it.
 
-### 3.7 Indentation
+### 3.8 Indentation
 
 Aether uses significant indentation (4 spaces) for block structure, similar to Python:
 
@@ -282,12 +382,57 @@ func example(): u64 {
 
 ### 4.1 Primitive Types
 
+Aether provides a full set of primitive types. All type names are lowercase keywords:
+
+| Type | Description | Size |
+|------|-------------|------|
+| `void` | Zero-sized type (no value) | 0 bytes |
+| `bool` | Boolean (true/false) | 1 byte |
+| `byte` | Raw byte (u8 alias) | 1 byte |
+| `u8` | Unsigned 8-bit integer | 1 byte |
+| `u16` | Unsigned 16-bit integer | 2 bytes |
+| `u32` | Unsigned 32-bit integer | 4 bytes |
+| `u64` | Unsigned 64-bit integer | 8 bytes |
+| `i8` | Signed 8-bit integer | 1 byte |
+| `i16` | Signed 16-bit integer | 2 bytes |
+| `i32` | Signed 32-bit integer | 4 bytes |
+| `i64` | Signed 64-bit integer | 8 bytes |
+| `f32` | IEEE 754 32-bit float (always signed) | 4 bytes |
+| `f64` | IEEE 754 64-bit double (always signed) | 8 bytes |
+| `string` | Null-terminated string (pointer + length header) | 8 bytes (pointer) |
+
+**Notes:**
+- All integer types (u8-u64, i8-i64) support arithmetic, bitwise, and comparison operations.
+- Signed integers (i8-i64) use two's complement representation.
+- Floating point types (f32, f64) follow IEEE 754. There are no "unsigned" float variants — all floats have a sign bit.
+- `bool` values are 0 (false) or 1 (true).
+- `byte` is an alias for `u8`.
+- There is no implicit `int` type — all types must be explicit in declarations.
+
+**Integer overflow semantics:**
+
+| Operation | Debug mode | Release mode |
+|-----------|------------|--------------|
+| `+` `-` `*` (signed) | ⚠️ Wraps (two's complement) | ⚠️ Wraps (two's complement) |
+| `+` `-` `*` (unsigned) | ⚠️ Wraps (modulo 2^N) | ⚠️ Wraps (modulo 2^N) |
+| `/` `%` (division by zero) | 💥 Runtime panic | 💥 Runtime panic |
+| `<<` `>>` (shift >= bit width) | ⚠️ Wraps (shift masked) | ⚠️ Wraps (shift masked) |
+
+> **Note:** Aether uses wrapping arithmetic by default (like C). There is no implicit overflow check. If you need checked arithmetic, use the standard library functions (`checked_add`, `checked_mul`, etc.) or implement your own. Division by zero always panics regardless of build mode.
+
 ```aether
 let a: u8 = 255          // unsigned 8-bit
 let b: u16 = 65535       // unsigned 16-bit
 let c: u32 = 4294967295  // unsigned 32-bit
 let d: u64 = 18446744073709551615  // unsigned 64-bit
 let e: bool = true       // boolean
+let f: byte = 0xFF       // raw byte
+let g: i8 = -128         // signed 8-bit
+let h: i16 = -32768      // signed 16-bit
+let i: i32 = -2147483648 // signed 32-bit
+let j: i64 = -9223372036854775808 // signed 64-bit
+let k: f32 = 3.14        // 32-bit float
+let l: f64 = 3.141592653589793 // 64-bit float
 ```
 
 ### 4.2 Compound Types
@@ -314,9 +459,50 @@ let rc: rc SharedData = rc_new(data)
 // Optionals
 let opt: u64? = some(42)
 let none_val: u64? = none
+
+// Function types
+let handler: func(u64, string): bool   // function pointer type
+let callback: func(): void             // void-returning function
+
+// Tuple types
+let pair: (u64, string)                // anonymous tuple
+let triple: (i32, f64, bool)           // 3-element tuple
 ```
 
+**Function type syntax:** `func(ParamType1, ParamType2, ...): ReturnType`. The parameter list is comma-separated. The return type follows the colon. For void functions, the return type is omitted or `void`.
+
+**Tuple type syntax:** `(Type1, Type2, ...)`. Tuples are anonymous structs. They can be destructured:
+
+```aether
+let pair = (42, "hello")
+let (num, str) = pair   // destructuring
+```
+
+**Type casting with `as`:** The `as` keyword performs explicit type conversion between compatible types:
+
+```aether
+let x: u64 = 42
+let y: u8 = x as u8       // truncates to 8 bits
+let z: f64 = 3.14
+let w: f32 = z as f32     // float truncation
+let b: byte = 0x41
+let c: char = b as char   // byte to char (same type)
+```
+
+> **Note:** `as` casts are unchecked — they truncate or reinterpret bits without runtime checks. For checked conversions, use the constructor pattern: `u8(x)`, `f32(z)`, etc. which may perform bounds checking in debug mode.
+
 ### 4.3 Type Aliases
+
+Aether provides common type aliases for convenience. These are defined in the standard library and are just shorthand for the underlying explicit types:
+
+| Alias | Underlying Type | Description |
+|-------|----------------|-------------|
+| `int` | `i64` | Default signed integer |
+| `float` | `f32` | Default floating-point |
+| `double` | `f64` | Double-precision float |
+| `char` | `byte` | Single character (byte) |
+
+> **Note:** These are aliases, not distinct types. `int` and `i64` are the same type. Use the explicit types (`u64`, `i32`, `f64`, etc.) when you need a specific size — aliases are for convenience in general-purpose code.
 
 ```aether
 type Result = u64
@@ -338,6 +524,8 @@ let x = p.x
 
 ### 4.5 Enums
 
+Enumerations are tagged unions. Variants can carry payload data. Enum construction uses the `::` (scope resolution) syntax:
+
 ```aether
 enum Error {
     NotFound
@@ -349,6 +537,8 @@ enum Error {
 let err = Error::NotFound
 let custom = Error::InvalidInput("bad data")
 ```
+
+**Enum construction with `::`**: The `EnumName::Variant(args)` syntax is handled by the parser. When the codegen encounters a `::` expression where the left side is an enum type and the right side is a variant name, it creates the enum discriminant (data pointer or integer tag) in `rax`. For variants with payload, the payload is stored inline in the struct layout.
 
 ### 4.6 Classes
 
@@ -436,6 +626,45 @@ let x = 10
 let x = x + 5   // shadows previous x, now 15
 ```
 
+### 5.4 Global Variables
+
+File-scope `let` declarations create global variables. They are initialized at program startup and live for the entire program lifetime:
+
+```aether
+let GLOBAL_CONFIG: string = "default"
+let mut counter: u64 = 0
+```
+
+Global variables are stored in the `.bss` (zero-initialized) or `.data` (initialized) section. Mutable globals require `unsafe` to access from multiple functions, as the compiler cannot prove thread safety.
+
+### 5.5 Recursion
+
+Aether supports recursive functions. The compiler does not perform tail-call optimization (TCO) yet:
+
+```aether
+func factorial(n: u64): u64 {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+```
+
+Recursion depth is limited only by the available stack space. The default stack size is 2 MB on host targets and configurable on freestanding targets.
+
+### 5.6 Loop Labels
+
+Loops can be labeled to allow `break` and `continue` to target an outer loop:
+
+```aether
+outer: for i in 0..10 {
+    for j in 0..10 {
+        if i * j > 50 { break outer }   // breaks out of both loops
+        if j == 5 { continue outer }    // continues the outer loop
+    }
+}
+```
+
+Labels are identifiers followed by a colon (`:`). They can be applied to `for`, `while`, and `loop` constructs.
+
 ---
 
 ## 6. Functions
@@ -479,7 +708,30 @@ inline func fast_path(): u64 { return 42 }
 
 // Entry point at specific address
 @entry(0x100000) func kernel_main() { ... }
+
+// Test fixture attribute — marks a function as a test with expected exit code
+@test(expect=0) func test_addition(): u64 {
+    assert(1 + 1 == 2)
+    return 0
+}
+
+// Module ABI version declaration
+@module_abi(version=1) module my_module {
+    // module body
+}
 ```
+
+**Standard attributes:**
+| Attribute | Description |
+|-----------|-------------|
+| `@force_inline` | Force the compiler to inline this function |
+| `@no_inline` | Prevent inlining of this function |
+| `@export` | Export function for module loader visibility |
+| `@entry(addr)` | Set binary entry point at specific address |
+| `@test(expect=N)` | Mark function as test fixture; binary exits with N on success |
+| `@module_abi(version=N)` | Declare ABI version for module declarations |
+| `@layout(start=N, max=M, file="name")` | Flat binary layout: start address, max size, output file |
+| `@kernel_layout` | Enable kernel memory map overlap verification |
 
 ### 6.3 Default Parameters
 
@@ -492,7 +744,36 @@ create_window("Hello")                    // uses defaults
 create_window("Wide", 1024, 768)          // explicit
 ```
 
+### 6.5 Extern Functions (FFI)
+
+```aether
+extern func puts(s: string): int
+extern func malloc(size: u64): ptr void
+extern func free(ptr: ptr void)
+```
+
+Extern functions are declared without a body. They tell the compiler the function exists in another object file or shared library. The compiler emits an `extern` NASM directive and generates a call instruction with the correct ABI (SysV for x86_64).
+
+**Calling convention:** Aether uses the System V AMD64 ABI for extern calls:
+- Integer/pointer arguments: `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`
+- Floating-point arguments: `xmm0`–`xmm7`
+- Return value: `rax` (integer/pointer), `xmm0` (float/double)
+- Stack alignment: 16 bytes before `call` instruction
+
+```aether
+extern func printf(fmt: string, ...): int
+
+func main(): u64 {
+    printf("Hello from C! %d\n", 42)
+    return 0
+}
+```
+
+> **Note:** Extern functions are unsafe by nature — the compiler cannot verify the types or memory safety of external code. Use `unsafe` blocks when calling extern functions that involve pointer manipulation.
+
 ### 6.4 Variadic Functions
+
+Variadic parameters accept zero or more arguments of the given type. The variadic parameter must be the last parameter in the function signature.
 
 ```aether
 func sum(values: ...u64): u64 {
@@ -504,7 +785,10 @@ func sum(values: ...u64): u64 {
 }
 
 let s = sum(1, 2, 3, 4, 5)  // s = 15
+let empty = sum()            // empty call — returns 0
 ```
+
+Inside the function, the variadic parameter behaves like an array. Iterating over it with `for v in values` works as expected. Calling with no arguments produces an empty array (length 0), so the loop body never executes.
 
 ---
 
@@ -558,6 +842,7 @@ for val in arr {
 }
 
 // With index
+// Test fixture: test_for_index.ae
 for i, val in arr {
     print("arr[{i}] = {val}")
 }
@@ -577,18 +862,15 @@ for i in 0..100 {
 
 ```aether
 match value {
-    case 0 => print("zero")
-    case 1..9 => print("single digit")
-    case > 100 => print("big")
-    case string(s) => print("got string: {s}")
-    case _ => print("default")
+    case 0 -> print("zero")
+    case _ -> print("default")
 }
 
 // Match as expression
 let description = match value {
-    case 0 => "zero"
-    case 1..9 => "small"
-    case _ => "large"
+    case 0 -> "zero"
+    case 1..9 -> "small"
+    case _ -> "large"
 }
 ```
 
@@ -602,6 +884,38 @@ func process_file(path: string) {
     // regardless of how it exits (return, error, break)
     f.write(data)
 }
+```
+
+**Defer ordering:** Deferred calls are executed in **last-in-first-out (LIFO)** order — the most recently deferred block runs first:
+
+```aether
+func example() {
+    defer { print("first defer") }   // runs second
+    defer { print("second defer") }  // runs first
+}
+// Output: "second defer" then "first defer"
+```
+
+**Defer in try/catch:** Deferred blocks inside a try body execute before the catch handler runs. This ensures resources are cleaned up before error handling:
+
+```aether
+try {
+    let f = File::open("/etc/config")
+    defer { f.close() }
+    // If an error occurs, f.close() runs before the catch block
+} catch _ {
+    print("error handled after cleanup")
+}
+```
+
+**Defer in loops:** Deferred blocks inside a loop body execute at the end of each iteration, not when the loop exits:
+
+```aether
+for i in 0..3 {
+    defer { print("cleaning up iteration") }
+    // defer runs at end of each iteration
+}
+// defer runs 3 times, once per iteration
 ```
 
 ---
@@ -687,8 +1001,6 @@ let y = x or 0
 
 ### 8.7 Pointers (Opt-In, Unsafe)
 
-Raw pointers exist for hardware interaction, DMA, and inline assembly. They require an `unsafe` block.
-
 ```aether
 func read_mmio(addr: ptr u64): u64 {
     unsafe {
@@ -696,6 +1008,20 @@ func read_mmio(addr: ptr u64): u64 {
     }
 }
 ```
+
+**What is allowed inside `unsafe` blocks:**
+- Dereferencing raw pointers (`*ptr`)
+- Calling functions marked `unsafe`
+- Inline assembly (`asm { }`)
+- Direct memory manipulation (pointer arithmetic, type punning)
+- Accessing or modifying mutable statics
+
+**What is NOT allowed inside `unsafe` blocks:**
+- Bypassing the type system (you cannot cast `ptr u64` to `string` without an explicit `as` cast)
+- Creating references with invalid lifetimes (the borrow checker still applies to `ref` types)
+- Calling non-`unsafe` functions with invalid arguments (type checking still applies)
+
+> **Safety note:** `unsafe` does not disable the compiler. Type checking, borrow checking, and lifetime analysis still apply to `ref` types. `unsafe` only enables operations that the compiler cannot prove safe: pointer dereference, inline assembly, and FFI calls.
 
 ### 8.8 Automatic Destructor Insertion
 
@@ -1346,7 +1672,7 @@ func render_dynamic(items: [ref dyn Drawable]) {
 Full NASM syntax is a first-class citizen. The asm block text is emitted verbatim into the generated assembly. Aether function parameters are **not** automatically substituted — use SysV ABI registers directly (rdi=arg1, rsi=arg2, rdx=arg3, rcx=arg4, r8=arg5, r9=arg6).
 
 ```aether
-func outb(port: u16, value: byte) {
+func writePortByte(port: u16, value: byte) {
     asm {
         mov dx, rdi
         mov al, sil
@@ -1378,12 +1704,12 @@ COM1_DATA equ 0x3F8
 LSR_THR_EMPTY equ 0x20
 ```
 
-### 17.4 Assembly with Output Bindings
+### 17.3 Assembly with Output Bindings
 
 Use `asm: (outputs) { body }` to bind assembly results to Aether variables.
 
 ```aether
-func rdtsc(): u64 {
+func readTimestampCounter(): u64 {
     let hi: u32
     let lo: u32
     asm: (hi, lo) {
@@ -1395,7 +1721,7 @@ func rdtsc(): u64 {
 }
 ```
 
-### 17.3 Labels and Jumps
+### 17.4 Labels and Jumps
 
 ```aether
 func spin_wait(cycles: u64) {
@@ -1408,7 +1734,7 @@ func spin_wait(cycles: u64) {
 }
 ```
 
-### 17.4 Multi-Architecture Assembly
+### 17.5 Multi-Architecture Assembly
 
 The same NASM syntax works on all targets via the multi-target assembler:
 
@@ -1429,7 +1755,7 @@ The compiler translates this to:
 - **ARM64 target**: Translated to ARM64 equivalents
 - **RISC-V target**: Translated to RISC-V equivalents
 
-### 17.5 Top-Level asm Blocks
+### 17.6 Top-Level asm Blocks
 
 At file level (outside any function), `asm { }` emits raw assembly text directly into the output without any function wrapping. This is used for declaring BSS/data sections, global symbols, and other NASM directives that must appear at file scope.
 
@@ -1486,6 +1812,17 @@ main:
         sub rcx, rdi
         xor al, al
         rep stosb
+```
+
+### 17.7 Asm Block RAX Preservation
+
+```aether
+func get_forty_two(): u64 {
+    asm {
+        mov rax, 42
+    }
+    // No "xor rax, rax" emitted here — rax preserved from asm block
+}
 ```
 
 ---
@@ -1591,7 +1928,7 @@ func main(args: [][]byte): int {
 }
 ```
 
-### 18.6 Memory Layout Directives
+### 18.7 Memory Layout Directives
 
 ```aether
 @layout(start=0x7C00, max=512, file="stage1.bin")
@@ -1624,6 +1961,10 @@ func alloc_usb_buf(): UsbDmaBuffer {
 }  // compiler inserts: return to pool on drop
 ```
 
+**Syntax**: `pool <Name> of size <N>, count <M>, alignment <A>`
+
+The parser accepts `pool`, `of`, `size`, `count`, and `alignment` as keywords. The AST node stores `name`, `size`, `count`, and `alignment` fields. Codegen currently emits `; pool declaration (reserved)` and produces no runtime code.
+
 ### 18.9 Protocol Generation
 
 ```aether
@@ -1636,6 +1977,10 @@ protocol Serial {
     }
 }
 ```
+
+**Syntax**: `protocol <Name> { <field_decls> <method_decls> }`
+
+The `protocol` keyword is parsed at the top level. The AST node (`NODE_PROTOCOL_DECL`) stores a `name` and a list of method declarations. Codegen currently emits `; protocol declaration (interface)` and produces no runtime code. This is distinct from the `protocol` block in §28.1 (Automatic Protocol Generation for hardware), which is a separate feature.
 
 ---
 
@@ -1774,6 +2119,29 @@ The compiler ships a freestanding standard library:
 | `std.asm` | NASM helper macros and common sequences |
 | `std.arch` | Architecture detection, register definitions, multi-target helpers |
 
+### 21.1 Built-in Functions
+
+The following functions are available without any import. They are emitted directly by the compiler:
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `print` | `print(...)` | Print values to stdout (variadic, auto-converts types) |
+| `sizeof` | `sizeof(T) -> u64` | Returns the size of type `T` in bytes |
+| `alignof` | `alignof(T) -> u64` | Returns the alignment of type `T` in bytes |
+| `offsetof` | `offsetof(T, field) -> u64` | Returns the byte offset of a struct field |
+| `typeName` | `typeName(T) -> string` | Returns the string name of type `T` at compile time |
+| `panic` | `panic(msg: string)` | Prints a message and aborts the program |
+
+```aether
+let size = sizeof(u64)           // 8
+let align = alignof(u64)         // 8
+let offset = offsetof(Point, y)  // byte offset of y field
+let name = typeName(u64)         // "u64"
+panic("unreachable code reached") // abort with message
+```
+
+> **Note:** `sizeof`, `alignof`, `offsetof`, and `typeName` are compile-time evaluable — they produce constant values that can be used in `const` declarations and `#run` blocks.
+
 ---
 
 ## 22. Build System
@@ -1781,15 +2149,13 @@ The compiler ships a freestanding standard library:
 ### 22.1 `aether` CLI
 
 ```
-aether new      <name>          # Create new project
-aether build    [--target=...]   # Compile project
+aether build    [--target=...]   # Compile source file
 aether run      [--target=...]   # Build and run
-aether test     [--target=...]   # Run unit tests
-aether fmt      [files...]       # Format source
-aether doc      [files...]       # Generate documentation
-aether asm      [file.ae]        # Show generated assembly
+aether asm      [--target=...]   # Show generated assembly
 aether inspect  [binary]         # Inspect ELF metadata
-aether init     [--lib|--bin]    # Init project structure
+aether init|new <name>           # Scaffold new project (planned)
+aether fmt      [files...]       # Format source (planned)
+aether doc      [files...]       # Generate documentation (planned)
 ```
 
 ### 22.2 Project Structure
@@ -1846,9 +2212,9 @@ std = { path = "/lib/aether/std" }
 
 ---
 
-## 24. Think Outside the Box: Unique Aether Innovations
+## 24. Future & Aspirational Features
 
-This section describes the features that make Aether genuinely different from other systems languages.
+This section describes features that make Aether genuinely different from other systems languages. Many are aspirational — they represent the long-term vision.
 
 ### 24.1 Compile-Time OS Knowledge
 
@@ -1988,24 +2354,7 @@ func safe_path() {
 }
 ```
 
-### 24.9 Automatic Boot Chain Generation
-
-```aether
-// Describe the boot chain declaratively
-bootchain {
-    stage1: @layout(start=0x7C00, max=512)
-    stage2: @layout(start=0x7E00, max=16384)
-    kernel: @layout(start=0x1000000)
-}
-
-// Compiler generates:
-// 1. Stage1 MBR with correct INT 13h parameters
-// 2. Stage2 loader with correct sector counts
-// 3. Kernel entry point at correct address
-// 4. Disk image with correct layout
-```
-
-### 24.10 Zero-Cost Error Context
+### 24.9 Zero-Cost Error Context
 
 ```aether
 func read_config(): throws Config {
@@ -2019,7 +2368,7 @@ func read_config(): throws Config {
 // In release builds: only the error discriminant remains (zero-cost).
 ```
 
-### 24.11 Compile-Time Unit Checking
+### 24.10 Compile-Time Unit Checking
 
 ```aether
 // The compiler tracks physical units at compile time
@@ -2037,7 +2386,7 @@ func speed(d: f64, t: f64): f64 {
 // let bad = distance(10, 5) + speed(10, 5)
 ```
 
-### 24.12 Automatic Interrupt Handler Generation
+### 24.11 Automatic Interrupt Handler Generation
 
 ```aether
 // Declare interrupt handlers declaratively
@@ -2050,12 +2399,27 @@ interrupt timer at(0x20) {
 }
 
 interrupt keyboard at(0x21) {
-    let scancode = inb(0x60)
+    let scancode = readPortByte(0x60)
     handle_key(scancode)
 }
 ```
 
----
+### 24.12 Automatic Boot Chain Generation
+
+```aether
+// Describe the boot chain declaratively
+bootchain {
+    stage1: @layout(start=0x7C00, max=512)
+    stage2: @layout(start=0x7E00, max=16384)
+    kernel: @layout(start=0x1000000)
+}
+
+// Compiler generates:
+// 1. Stage1 MBR with correct INT 13h parameters
+// 2. Stage2 loader with correct sector counts
+// 3. Kernel entry point at correct address
+// 4. Disk image with correct layout
+```
 
 ---
 
@@ -2100,190 +2464,13 @@ The compiler generates code compatible with the Aether OS fiber scheduler:
 
 ---
 
-## 26. Advanced OS Integration
+## 26. Module System and Imports
 
-### 26.1 Automatic Boot Chain Generation
-
-```aether
-// Describe the boot chain declaratively
-bootchain {
-    stage1: @layout(start=0x7C00, max=512)
-    stage2: @layout(start=0x7E00, max=16384)
-    kernel: @layout(start=0x1000000)
-}
-
-// Compiler generates:
-// 1. Stage1 MBR with correct INT 13h parameters
-// 2. Stage2 loader with correct sector counts
-// 3. Kernel entry point at correct address
-// 4. Disk image with correct layout
-```
-
-### 26.2 Automatic Interrupt Handler Generation
-
-```aether
-// Declare interrupt handlers declaratively
-interrupt timer at(0x20) {
-    // Compiler generates:
-    // 1. Correct interrupt frame save/restore
-    // 2. EOI signaling
-    // 3. Stack switching if needed
-    tick_count += 1
-}
-
-interrupt keyboard at(0x21) {
-    let scancode = inb(0x60)
-    handle_key(scancode)
-}
-```
-
-### 26.3 Self-Documenting Binary Format
-
-```aether
-@metadata {
-    author = "Aether Team"
-    description = "Kernel main binary"
-    license = "MIT"
-    required_abi = "1.0"
-}
-```
-
-The compiler embeds this as an ELF note section. The OS can query it without loading the binary.
-
-### 26.4 Capability-Based Security
-
-```aether
-// Functions declare what capabilities they need
-@requires(io, mem)
-func write_disk(sector: u64, data: ref [u8]) {
-    // Compiler verifies caller has io and mem capabilities
-}
-
-// Capabilities are tracked at compile time
-func safe_path() {
-    // Error: write_disk requires io capability
-    // write_disk(0, data)
-}
-```
-
-### 26.5 Compile-Time Unit Checking
-
-```aether
-// The compiler tracks physical units at compile time
-@units(meters)
-func distance(v: f64, t: f64): f64 {
-    return v * t  // m/s * s = m ✓
-}
-
-@units(meters_per_second)
-func speed(d: f64, t: f64): f64 {
-    return d / t  // m / s = m/s ✓
-}
-
-// Compile error: can't add meters to seconds
-// let bad = distance(10, 5) + speed(10, 5)
-```
-
----
-
-## 27. Goal-Oriented I/O and Query Fusion
-
-### 27.1 Goal-Oriented I/O
-
-Instead of describing *how* to read a file, describe *what* you want:
-
-```aether
-// The compiler generates the optimal read path:
-// - Boot-time: raw ATA PIO reads
-// - Userspace: AetherFS syscalls
-// - In-memory FS: direct pointer access
-let config = from "/etc/aether.cfg" read Config
-```
-
-### 27.2 Query-Style Data Transformations
-
-Chain operations on collections — the compiler fuses them into a single loop with no intermediate allocations:
-
-```aether
-let active_users = db.users
-    .filter(|u| u.active)
-    .map(|u| (u.name, u.email))
-    .sort(|u| u.0)
-    .collect()
-```
-
-This compiles to a single fused loop. No temporary arrays, no allocation overhead.
-
-### 27.3 Pattern-Based Metaprogramming
-
-Instead of C++ templates or macros, Aether uses pattern matching on types:
-
-```aether
-impl<T> trait Hashable {
-    func hash(): u64 {
-        match T {
-            case u64 => self
-            case [u8] => hash_bytes(self)
-            case string => hash_str(self)
-            case struct { ...fields } => {
-                let mut h = 0
-                for field in fields { h ^= field.hash() }
-                h
-            }
-        }
-    }
-}
-```
-
----
-
-## 28. Protocol Generation and Hardware Configuration
-
-### 28.1 Automatic Protocol Generation
-
-Define hardware protocols declaratively:
-
-```aether
-protocol I2C {
-    scl pin = 5
-    sda pin = 6
-    speed = 100000
-
-    func start() {
-        asm {
-            // Compiler generates optimal bit-banging code
-            // based on pin assignments and speed
-        }
-    }
-
-    func write(byte data) {
-        // Compiler generates the I2C protocol sequence
-    }
-}
-```
-
-### 28.2 Compile-Time Hardware Configuration
-
-```aether
-// Detect hardware at compile time and generate optimized code
-#run {
-    if target_arch() == "x86_64" {
-        emit("func flush_tlb() { asm { mov cr3, cr3 } }")
-    } elif target_arch() == "arm64" {
-        emit("func flush_tlb() { asm { dsb ish; tlbi vmalle1is; dsb ish; isb } }")
-    }
-}
-```
-
----
-
-## 29. Module System and Imports
-
-### 29.1 File as Module
+### 26.1 File as Module
 
 Each `.ae` file is a module. The filename (without extension) is the module name.
 
-### 29.2 Source Imports (`.ae` files)
+### 26.2 Source Imports (`.ae` files)
 
 ```
 import "math.ae"
@@ -2292,7 +2479,7 @@ import "io/file.ae"
 
 Imports are resolved at compile time: the compiler reads the file, parses it with a shared arena, and merges declarations. Circular imports are detected. Two-pass semantic analysis (declare all names first, then visit bodies) handles forward references across files.
 
-### 29.3 Library Imports (`.aelib` files) — Phase 19 (planned)
+### 26.3 Library Imports (`.aelib` files)
 
 For closed-source third-party library distribution, Aether uses `.aelib` — an archive format containing compiled code (`.o` files) plus a metadata section with type signatures, class layouts, and the export table. The metadata enables code completion and compile-time validation while the archive format prevents trivial reverse engineering with `objdump`.
 
@@ -2322,7 +2509,7 @@ For closed-source third-party library distribution, Aether uses `.aelib` — an 
 - Type data: function signatures (return type, param count, params with name/type/mutability), struct/class layouts (field offsets/sizes), enum variants
 - String table: null-terminated strings concatenated
 
-### 29.4 Import Syntax
+### 26.4 Import Syntax
 
 ```
 # All public decls from a library
@@ -2341,7 +2528,7 @@ import "libtest.aelib" : Foo
 import "std/io"
 ```
 
-### 29.5 Resolution Order
+### 26.5 Resolution Order
 
 For `import "foo"` (no extension), the compiler tries in order:
 1. `foo.ae` — source file (for code you own)
@@ -2351,7 +2538,7 @@ For `import "foo"` (no extension), the compiler tries in order:
 
 If none found, the compiler reports an error listing what was tried.
 
-### 29.6 Public, Private, Internal Visibility
+### 26.6 Public, Private, Internal Visibility
 
 ```
 pub func exported() { }          // visible to importers
@@ -2362,7 +2549,7 @@ func default_public() { }        // public by default (for simplicity)
 
 For `.aelib` libraries, visibility is enforced via metadata gating — `private` and `internal` declarations are omitted from the metadata entirely, so they literally cannot be called from outside the library.
 
-### 29.7 Build Command
+### 26.7 Build Command
 
 ```
 aether build --target lib libtest.ae -o libtest.aelib
@@ -2370,22 +2557,22 @@ aether build --target lib libtest.ae -o libtest.aelib
 
 The new `--target lib` target produces code + metadata in one `.aelib` file.
 
-### 29.8 Linking Modes
+### 26.8 Linking Modes
 
 When importing a `.aelib`, the consumer has two options:
 
 - **Static linking** (default for `--target kernel`, `--target binary`): extract `.o` files from the archive, link them into the final binary. Everything in one executable — no runtime dependencies.
 - **Dynamic linking** (for `--target host`): reference the `.aelib` as a shared library, runtime resolution via the OS dynamic linker. Smaller binaries, can update libraries without recompiling.
 
-### 29.9 Multi-Arch Libraries
+### 26.9 Multi-Arch Libraries
 
 A `.aelib` can contain code for multiple architectures (x86_64, ARM64, RISC-V). The metadata is arch-agnostic — it references symbols by name. The linker picks the right arch at build time, like macOS fat dylibs.
 
-### 29.10 Why Class/Namespace Imports, Not Function-Level
+### 26.10 Why Class/Namespace Imports, Not Function-Level
 
 Function-level imports create ambiguity problems (multiple overloads with different signatures — which do you import?). Class-level is unambiguous: import the whole class, use `Foo.sayHello()` to call methods. This is how Python modules, Java classes, and C# namespaces work. The class is the natural unit of grouping.
 
-### 29.11 Why `.aelib`, Not `.aeb`?
+### 26.11 Why `.aelib`, Not `.aeb`?
 
 An ELF file with a metadata section (`.aeb`) is trivially reverse-engineerable with `objdump -d` — anyone can disassemble the code sections. An archive format (`.aelib`) requires writing a custom disassembler to extract the code sections AND understanding the archive layout. This matches how dylibs work on every platform (macOS, Linux, Windows) and is the natural choice for distributing compiled libraries without exposing source.
 
@@ -2407,10 +2594,9 @@ var, where, while, yield
 
 | Token | Rule |
 |-------|------|
-| Comment | `#` to end of line |
-| Block comment | `#{` ... `}#` (nestable) |
+| Comment | `//` to end of line |
+| Block comment | `/*` ... `*/` (nestable) |
 | String | Double-quoted, escape sequences: `\n`, `\t`, `\\`, `\"`, `\xNN` |
-| Multi-line string | `"""` ... `"""` (preserves newlines and indentation) |
 | Char | Single-quoted: `'a'`, `'\n'`, `'\x41'` |
 | Integer | Decimal: `42`, Hex: `0xFF`, Binary: `0b1010`, Octal: `0o77` |
 | Float | `3.14`, `1e10`, `0xFF.0p-3` |
@@ -2419,21 +2605,93 @@ var, where, while, yield
 | Terminator | Newline ends simple statements; expressions continue across lines |
 | Semicolons | Optional — may separate statements on the same line |
 
-## Appendix C: Compiler Pipeline
+## Appendix C: Build Profiles
+
+Aether supports two build profiles that affect optimization, contract checking, and error handling:
+
+| Feature | Debug (`-O0`) | Release (`-O2`/`-O3`) |
+|---------|---------------|----------------------|
+| Optimization | None (fast compile) | Full (constant folding, DCE, inlining) |
+| Contract checks | `pre()`/`post()` checked at runtime | Eliminated (optimizer hints only) |
+| Error context | Error messages preserved | Error discriminants only |
+| Stack traces | Full source map | Minimal |
+| Debug symbols | Included | Stripped |
+| Build time | Fast | Slower (optimization passes) |
+
+```bash
+# Debug build (default)
+aether build source.ae -o output
+
+# Release build
+aether build -O2 source.ae -o output
+
+# Maximum optimization
+aether build -O3 source.ae -o output
+```
+
+## Appendix D: Undefined Behavior
+
+The following operations are **undefined behavior** — the compiler may produce any result, including crashes, incorrect output, or silent data corruption:
+
+1. **Data races** — Concurrent read and write to the same memory location without synchronization
+2. **Use-after-free** — Dereferencing a pointer after the memory has been freed
+3. **Double free** — Calling `free()` on the same pointer twice
+4. **Null pointer dereference** — Reading from address `0x0` (outside a try block)
+5. **Uninitialized variable access** — Reading a `let` variable before it has been assigned
+6. **Invalid pointer arithmetic** — Moving a pointer beyond the bounds of its allocation
+7. **Dangling reference** — Returning a `ref` to a stack-local variable
+8. **Signed integer overflow** — `i8`, `i16`, `i32`, `i64` arithmetic that exceeds the representable range (wraps silently)
+9. **Shift overflow** — Shifting by an amount >= the bit width of the type
+10. **Type punning through `as`** — Casting between incompatible types and reading the result
+11. **Calling variadic function with wrong types** — Passing arguments that don't match the expected types
+12. **Stack overflow** — Exceeding the available stack space (e.g., infinite recursion)
+
+> **Note:** Aether does not have Rust-level safety guarantees. The compiler trusts the programmer. `unsafe` blocks explicitly opt into operations 1-7. Operations 8-9 are always wrapping (not UB in Aether, but the result may be unexpected). Use the standard library's checked arithmetic functions when you need overflow detection.
+
+## Appendix E: Compiler Pipeline
+
+The Aether compiler pipeline:
 
 ```
 Source (.ae)
   → Tokenizer (whitespace-aware, indent engine)
     → Parser (Pratt + recursive descent)
       → AST (50+ node types)
-        → Semantic Analysis (type checking, name resolution, borrow checking)
-          → HIR → MIR (CFG with memory annotations)
-            → Optimization (constant folding, DCE, inlining, escape analysis)
-              → LIR (register allocation, instruction selection)
-                → Code Generation (NASM text output)
-                  → Multi-Target Assembler (x86_64/ARM64/RISC-V)
-                    → Binary Output (ELF64/Mach-O/PE32+/flat binary)
+        → Import Resolution (read, parse, merge imported files)
+          → Semantic Analysis (type checking, name resolution)
+            → Code Generation (NASM text output)
+              → Multi-Target Assembler (x86_64/ARM64/RISC-V)
+                → Binary Output (ELF64/Mach-O/PE32+/flat binary)
 ```
+
+**Planned future pipeline phases** (not yet implemented):
+
+```
+            → HIR (High-level IR — type-aware, for semantic passes)
+              → MIR (Mid-level IR — CFG with memory annotations)
+                → Optimization (constant folding, DCE, inlining)
+                  → LIR (Low-level IR — register allocation)
+                    → Code Generation (from LIR, not AST)
+```
+
+**Comparison with other languages:**
+
+| Phase | Aether | Swift | Zig |
+|-------|--------|-------|-----|
+| Tokenizer | Direct | Lexer | Tokenizer |
+| Parser | Recursive descent | Recursive descent | Recursive descent |
+| AST | 50+ node types | AST | AST |
+| Import resolution | File-level | Module system | `@import` |
+| Semantic analysis | Two-pass | Sema | ZIR → AIR |
+| High-level IR | Planned | SIL (Swift IR) | ZIR (Zig IR) |
+| Mid-level IR | Planned | SIL Optimizer | AIR (Analyzed IR) |
+| Optimization | Partial | SIL + LLVM passes | LLVM passes |
+| Low-level IR | Planned | LLVM IR | LLVM IR |
+| Code generation | NASM text | LLVM IRGen | LLVM / native |
+| Assembly | Multi-target | LLVM MC | LLVM MC |
+| Binary output | ELF/Mach-O/PE | LLVM | LLVM / custom |
+
+> **Note:** Aether's current pipeline skips intermediate IRs and goes directly from AST to NASM assembly text. This is by design for the bootstrap phase — it keeps the compiler simple and debuggable. As the language matures, HIR/MIR/LIR passes will be added for better optimization and code quality.
 
 ---
 

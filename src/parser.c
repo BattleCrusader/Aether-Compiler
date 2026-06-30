@@ -110,6 +110,7 @@ static const TokenType STMT_START[] = {
     TOKEN_KW_CONST, TOKEN_KW_IMPORT, TOKEN_KW_MODULE,
     TOKEN_KW_PUB, TOKEN_KW_STATIC,
     TOKEN_KW_UNSAFE, TOKEN_KW_TRY, TOKEN_KW_THROW,
+    TOKEN_KW_TYPE,
     TOKEN_AT,
     TOKEN_RBRACE, /* closing brace can follow statements */
 };
@@ -203,8 +204,6 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
                     func->data.func.is_kernel_layout = true;
                 } else if (strcmp(aname, "test") == 0) {
                     func->data.func.has_test = true;
-                    func->data.func.test_expect_int = last_attr->data.attr.test_expect_int;
-                    func->data.func.test_expect_str = last_attr->data.attr.test_expect_str;
                 }
             }
             node_list_append(decls, func);
@@ -262,6 +261,27 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             node->type = NODE_CONST_DECL;
             node_list_append(decls, node);
         }
+    } else if (parser_match(p, TOKEN_KW_LET)) {
+        /* let [mut] name[: type] [= expr] — file-scope variable */
+        bool is_mut = parser_match(p, TOKEN_KW_MUT);
+        if (!parser_check(p, TOKEN_IDENT)) {
+            parser_error(p, p->current, "expected variable name in let");
+            return;
+        }
+        Token name_tok = p->current; parser_advance(p);
+        AstNode *type = NULL;
+        if (parser_match(p, TOKEN_COLON)) {
+            type = parse_type(p);
+        }
+        AstNode *value = NULL;
+        if (parser_match(p, TOKEN_EQ)) {
+            value = parse_expr(p);
+        }
+        AstNode *node = node_let(p->arena, name_tok.loc,
+            node_ident(p->arena, name_tok.loc, name_tok.text),
+            type, value, is_mut);
+        node->data.let_decl.is_global = true;
+        node_list_append(decls, node);
     } else if (parser_match(p, TOKEN_KW_IMPORT)) {
         /* import "path" or import name */
         Token path = p->current; parser_advance(p);
@@ -418,6 +438,24 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             node_list_append(decls, proto);
         } else {
             parser_error(p, p->current, "expected protocol name");
+        }
+    } else if (parser_match(p, TOKEN_KW_TYPE)) {
+        /* type Name = ExistingType */
+        if (parser_check(p, TOKEN_IDENT)) {
+            Token name_tok = p->current; parser_advance(p);
+            AstNode *alias = node_create(p->arena, NODE_TYPE_ALIAS, name_tok.loc);
+            /* Store name as first item in list, underlying type as second */
+            AstNode *name_node = node_ident(p->arena, name_tok.loc, name_tok.text);
+            node_list_append(&alias->data.list, name_node);
+            if (parser_match(p, TOKEN_EQ)) {
+                AstNode *underlying = parse_type(p);
+                if (underlying) {
+                    node_list_append(&alias->data.list, underlying);
+                }
+            }
+            node_list_append(decls, alias);
+        } else {
+            parser_error(p, p->current, "expected type alias name");
         }
     } else if (parser_match(p, TOKEN_KW_IMPL)) {
         /* impl Trait for Type { methods } */
@@ -579,10 +617,12 @@ AstNodeList parse_params(Parser *p) {
 
     while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
         bool is_mut = parser_match(p, TOKEN_KW_MUT);
-        bool is_varargs = parser_match(p, TOKEN_PIPE_PIPE); /* || means varargs? */
-        /* Actually varargs syntax is '...' or use '...int' style */
+        bool is_varargs = false;
+        /* Variadic: ... before param name or ... before type */
         if (parser_match(p, TOKEN_DOT_DOT)) {
             is_varargs = true;
+            /* Consume the third dot if present: ...name */
+            parser_match(p, TOKEN_DOT);
         }
 
         /* Allow both TOKEN_IDENT and TOKEN_KW_SELF as param names */
@@ -594,12 +634,25 @@ AstNodeList parse_params(Parser *p) {
 
         AstNode *type = NULL;
         if (parser_match(p, TOKEN_COLON)) {
+            /* Check for ...Type syntax after colon (variadic) */
+            if (parser_match(p, TOKEN_DOT_DOT)) {
+                is_varargs = true;
+                /* Consume the third dot if present: ...Type */
+                parser_match(p, TOKEN_DOT);
+            }
             type = parse_type(p);
+        }
+
+        /* Default parameter value: param: Type = expr */
+        AstNode *default_value = NULL;
+        if (parser_match(p, TOKEN_EQ)) {
+            default_value = parse_expr(p);
         }
 
         AstNode *param = node_param(p->arena, name_tok.loc,
             node_ident(p->arena, name_tok.loc, name_tok.text),
             type, is_mut, is_varargs);
+        param->data.param.default_value = default_value;
 
         node_list_append(&params, param);
 
@@ -837,9 +890,18 @@ AstNode *parse_statement(Parser *p) {
     /* for loop */
     if (parser_match(p, TOKEN_KW_FOR)) {
         AstNode *var = NULL;
+        AstNode *index_var = NULL;
         if (parser_check(p, TOKEN_IDENT)) {
             Token v = p->current; parser_advance(p);
             var = node_ident(p->arena, v.loc, v.text);
+            /* Check for index+value: for i, val in arr */
+            if (parser_match(p, TOKEN_COMMA)) {
+                if (parser_check(p, TOKEN_IDENT)) {
+                    Token v2 = p->current; parser_advance(p);
+                    index_var = var; /* first ident is the index */
+                    var = node_ident(p->arena, v2.loc, v2.text);
+                }
+            }
         }
 
         AstNode *iterable = NULL;
@@ -853,7 +915,12 @@ AstNode *parse_statement(Parser *p) {
             body = parse_block_braced(p);
         }
 
-        return node_for(p->arena, p->previous.loc, var, iterable, body);
+        AstNode *for_node = node_for(p->arena, p->previous.loc, var, iterable, body);
+        /* Store index_var in the for_node */
+        if (index_var) {
+            for_node->data.for_node.index_var = index_var;
+        }
+        return for_node;
     }
 
     /* return */
@@ -1006,7 +1073,12 @@ AstNode *parse_statement(Parser *p) {
 
     /* unsafe block */
     if (parser_match(p, TOKEN_KW_UNSAFE)) {
-        AstNode *body = parse_statement(p);
+        AstNode *body = NULL;
+        if (parser_match(p, TOKEN_LBRACE)) {
+            body = parse_block_braced(p);
+        } else {
+            body = parse_statement(p);
+        }
         if (body) {
             AstNode *unsafe_node = node_create(p->arena, NODE_UNSAFE, body->loc);
             /* Wrap the body in the unsafe node's list */
@@ -1154,6 +1226,20 @@ AstNode *parse_pattern(Parser *p) {
 
     if (parser_check(p, TOKEN_INT_LITERAL)) {
         Token t = p->current; parser_advance(p);
+        /* Check for range pattern: 1..9 or 1..=9 */
+        if (parser_check(p, TOKEN_DOT_DOT) || parser_check(p, TOKEN_DOT_DOT_EQ)) {
+            bool inclusive = parser_match(p, TOKEN_DOT_DOT_EQ);
+            if (!inclusive) parser_match(p, TOKEN_DOT_DOT); /* consume .. */
+            if (parser_check(p, TOKEN_INT_LITERAL)) {
+                Token end_t = p->current; parser_advance(p);
+                /* Build a range binary op: left=start, right=end, op=BIN_RANGE or BIN_RANGE_INCLUSIVE */
+                AstNode *start = node_int_literal(p->arena, t.loc, t.val.int_value);
+                AstNode *end = node_int_literal(p->arena, end_t.loc, end_t.val.int_value);
+                return node_binary(p->arena, t.loc, inclusive ? BIN_RANGE_INCLUSIVE : BIN_RANGE, start, end);
+            }
+            parser_error(p, p->current, "expected range end value");
+            return NULL;
+        }
         return node_int_literal(p->arena, t.loc, t.val.int_value);
     }
 
@@ -1344,8 +1430,6 @@ AstNode *parse_attribute(Parser *p) {
         attr->data.attr.has_module_abi = false;
         attr->data.attr.module_abi_version = -1;
         attr->data.attr.has_test = false;
-        attr->data.attr.test_expect_int = -1;
-        attr->data.attr.test_expect_str = (StringView){0};
 
         /* @name(payload) — parenthesized attribute arguments */
         if (parser_match(p, TOKEN_LPAREN)) {
@@ -1388,23 +1472,11 @@ AstNode *parse_attribute(Parser *p) {
                             } else if (klen == 7 && strncmp(key.data, "version", 7) == 0) {
                                 attr->data.attr.has_module_abi = true;
                                 attr->data.attr.module_abi_version = (int64_t)val;
-                            } else if (klen == 6 && strncmp(key.data, "expect", 6) == 0) {
-                                attr->data.attr.has_test = true;
-                                attr->data.attr.test_expect_int = (int64_t)val;
-                                attr->data.attr.test_expect_str = (StringView){0};
                             }
                         } else if (parser_check(p, TOKEN_STRING_LITERAL)) {
-                            /* String value — for @Test(expect: "hello") or @layout(file="name") */
+                            /* String value — for @layout(file="name") */
                             StringView sv = p->current.text;
-                            /* Check if this is for expect key */
-                            size_t klen = key.len;
-                            if (klen == 6 && strncmp(key.data, "expect", 6) == 0) {
-                                attr->data.attr.has_test = true;
-                                attr->data.attr.test_expect_int = -1;
-                                attr->data.attr.test_expect_str = sv;
-                            } else {
-                                attr->data.attr.layout_file = sv;
-                            }
+                            attr->data.attr.layout_file = sv;
                             parser_advance(p);
                         } else {
                             /* Skip unknown value */
@@ -1462,7 +1534,7 @@ static Precedence token_precedence(TokenType type) {
         case TOKEN_LT_LT: case TOKEN_GT_GT: return PREC_SHIFT;
         case TOKEN_DOT_DOT: case TOKEN_DOT_DOT_EQ: return PREC_RANGE;
         case TOKEN_PLUS: case TOKEN_MINUS: return PREC_TERM;
-        case TOKEN_STAR: case TOKEN_SLASH: case TOKEN_PERCENT: return PREC_FACTOR;
+        case TOKEN_STAR: case TOKEN_SLASH: case TOKEN_PERCENT: case TOKEN_STAR_STAR: return PREC_FACTOR;
         default: return PREC_MIN;
     }
 }
@@ -1627,6 +1699,33 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_ident(p->arena, loc, SV("self"));
 
+        case TOKEN_KW_MATCH: {
+            parser_advance(p);
+            AstNode *value = parse_expr(p);
+            AstNode *match_node = node_match(p->arena, p->previous.loc, value);
+
+            if (parser_match(p, TOKEN_LBRACE)) {
+                while (!parser_check(p, TOKEN_RBRACE) && !parser_check(p, TOKEN_EOF)) {
+                    if (parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_SEMICOLON) ||
+                        parser_match(p, TOKEN_NEWLINE) || parser_match(p, TOKEN_NEWLINE)) continue;
+
+                    /* Skip optional 'case' keyword */
+                    parser_match(p, TOKEN_KW_CASE);
+                    AstNode *pattern = parse_pattern(p);
+                    AstNode *body = NULL;
+                    if (parser_match(p, TOKEN_ARROW)) {
+                        /* `=>` token? Use ARROW (->) */
+                        body = parse_expr(p);
+                    }
+                    AstNode *arm = node_match_arm(p->arena, pattern->loc, pattern, body);
+                    node_list_append(&match_node->data.match_node.arms, arm);
+                }
+                parser_expect(p, TOKEN_RBRACE, "match body");
+            }
+
+            return match_node;
+        }
+
         case TOKEN_IDENT:
             parser_advance(p);
             return node_ident(p->arena, loc, token.text);
@@ -1730,6 +1829,11 @@ static AstNode *parse_prefix(Parser *p) {
             parser_advance(p);
             return node_unary(p->arena, loc, UNARY_HEAP, parse_expr_prec(p, PREC_UNARY));
 
+        case TOKEN_HASH:
+            /* #expr — array length prefix operator */
+            parser_advance(p);
+            return node_unary(p->arena, loc, UNARY_ARRAY_LEN, parse_expr_prec(p, PREC_UNARY));
+
         default:
             parser_error(p, token, "expected expression");
             parser_advance(p);
@@ -1747,8 +1851,19 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         parser_advance(p);
         AstNode *call = node_call(p->arena, loc, left);
         while (!parser_check(p, TOKEN_RPAREN) && !parser_check(p, TOKEN_EOF)) {
-            AstNode *arg = parse_expr(p);
-            node_list_append(&call->data.call.args, arg);
+            /* Skip newlines between arguments */
+            while (parser_match(p, TOKEN_NEWLINE));
+            if (parser_check(p, TOKEN_RPAREN)) break;
+            /* Handle empty arg: , , or leading , — means "none" for optional variadics */
+            if (parser_check(p, TOKEN_COMMA)) {
+                /* Empty argument — emit a NONE literal (0) */
+                AstNode *none = node_int_literal(p->arena, loc, 0);
+                none->type = NODE_LITERAL_NONE;
+                node_list_append(&call->data.call.args, none);
+            } else {
+                AstNode *arg = parse_expr(p);
+                node_list_append(&call->data.call.args, arg);
+            }
             if (!parser_match(p, TOKEN_COMMA)) break;
         }
         parser_expect(p, TOKEN_RPAREN, "function call");
@@ -1822,6 +1937,7 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         case TOKEN_PLUS: op = BIN_ADD; break;
         case TOKEN_MINUS: op = BIN_SUB; break;
         case TOKEN_STAR: op = BIN_MUL; break;
+        case TOKEN_STAR_STAR: op = BIN_POWER; break;
         case TOKEN_SLASH: op = BIN_DIV; break;
         case TOKEN_PERCENT: op = BIN_MOD; break;
         case TOKEN_EQ_EQ: op = BIN_EQ; break;
@@ -1831,7 +1947,8 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         case TOKEN_LT_EQ: op = BIN_LE; break;
         case TOKEN_GT_EQ: op = BIN_GE; break;
         case TOKEN_AND_AND: case TOKEN_KW_AND: op = BIN_AND; break;
-        case TOKEN_PIPE_PIPE: case TOKEN_KW_OR: op = BIN_OR; break;
+        case TOKEN_PIPE_PIPE: op = BIN_OR; break;
+        case TOKEN_KW_OR: op = BIN_OR; break;
         case TOKEN_AMPERSAND: op = BIN_BIT_AND; break;
         case TOKEN_PIPE: op = BIN_BIT_OR; break;
         case TOKEN_CARET: op = BIN_BIT_XOR; break;

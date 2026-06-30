@@ -1,0 +1,57 @@
+// test_spec_03_operators_comparison.ae — Section 3.4: Comparison Operators
+// Tests: ==, !=, <, >, <=, >=
+
+import "std/test"
+
+@test
+func main(): void {
+    // Equality
+    let eq_true: bool = 42 == 42
+    let eq_false: bool = 42 == 43
+
+    // Inequality
+    let neq_true: bool = 42 != 43
+    let neq_false: bool = 42 != 42
+
+    // Less than
+    let lt_true: bool = 10 < 20
+    let lt_false: bool = 20 < 10
+    let lt_equal: bool = 10 < 10
+
+    // Greater than
+    let gt_true: bool = 20 > 10
+    let gt_false: bool = 10 > 20
+    let gt_equal: bool = 10 > 10
+
+    // Less than or equal
+    let le_true: bool = 10 <= 20
+    let le_equal: bool = 10 <= 10
+    let le_false: bool = 20 <= 10
+
+    // Greater than or equal
+    let ge_true: bool = 20 >= 10
+    let ge_equal: bool = 10 >= 10
+    let ge_false: bool = 10 >= 20
+
+    // Chained comparisons via and
+    let chain: bool = 10 < 20 and 20 < 30 and 30 > 25
+
+    // Verify with assertions
+    assertTrue(eq_true, "42 == 42 should be true")
+    assertTrue(not eq_false, "42 == 43 should be false")
+    assertTrue(neq_true, "42 != 43 should be true")
+    assertTrue(not neq_false, "42 != 42 should be false")
+    assertTrue(lt_true, "10 < 20 should be true")
+    assertTrue(not lt_false, "20 < 10 should be false")
+    assertTrue(not lt_equal, "10 < 10 should be false")
+    assertTrue(gt_true, "20 > 10 should be true")
+    assertTrue(not gt_false, "10 > 20 should be false")
+    assertTrue(not gt_equal, "10 > 10 should be false")
+    assertTrue(le_true, "10 <= 20 should be true")
+    assertTrue(le_equal, "10 <= 10 should be true")
+    assertTrue(not le_false, "20 <= 10 should be false")
+    assertTrue(ge_true, "20 >= 10 should be true")
+    assertTrue(ge_equal, "10 >= 10 should be true")
+    assertTrue(not ge_false, "10 >= 20 should be false")
+    assertTrue(chain, "10 < 20 and 20 < 30 and 30 > 25 should be true")
+}

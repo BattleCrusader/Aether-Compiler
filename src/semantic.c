@@ -257,6 +257,11 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                         decl->data.let_decl.name->data.ident.name.data,
                         decl->data.let_decl.name->data.ident.name.len);
                     scope_declare(sa, name, decl);
+                } else if (decl->type == NODE_LET && decl->data.let_decl.is_global) {
+                    const char *name = arena_strndup(sa->arena,
+                        decl->data.let_decl.name->data.ident.name.data,
+                        decl->data.let_decl.name->data.ident.name.len);
+                    scope_declare(sa, name, decl);
                 } else if (decl->type == NODE_STRUCT_DECL) {
                     const char *name = arena_strndup(sa->arena,
                         decl->data.struct_decl.name->data.ident.name.data,
@@ -314,32 +319,36 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                 semantic_visit_node(sa, node->data.func.body);
             }
 
-            /* Check: if function has a return type, body must end with a return */
+            /* Check: if function has a non-void return type, body must end with a return */
             if (node->data.func.return_type && node->data.func.body) {
-                bool has_return = false;
-                if (node->data.func.body->type == NODE_RETURN) {
-                    has_return = true;
-                } else if (node->data.func.body->type == NODE_ASM_BLOCK) {
-                    /* asm block body counts as having a return (compiler adds epilogue) */
-                    has_return = true;
-                } else if (node->data.func.body->type == NODE_BLOCK) {
-                    AstNodeList *stmts = &node->data.func.body->data.list;
-                    if (stmts->count > 0) {
-                        AstNode *last = stmts->items[stmts->count - 1];
-                        if (last->type == NODE_RETURN) {
-                            has_return = true;
-                        }
-                        /* asm block counts as having a return (compiler adds epilogue) */
-                        if (last->type == NODE_ASM_BLOCK) {
-                            has_return = true;
+                /* Skip check for void functions */
+                if (!(node->data.func.return_type->type == NODE_TYPE_PRIMITIVE &&
+                    node->data.func.return_type->data.type_node.prim == PRIM_VOID)) {
+                    bool has_return = false;
+                    if (node->data.func.body->type == NODE_RETURN) {
+                        has_return = true;
+                    } else if (node->data.func.body->type == NODE_ASM_BLOCK) {
+                        /* asm block body counts as having a return (compiler adds epilogue) */
+                        has_return = true;
+                    } else if (node->data.func.body->type == NODE_BLOCK) {
+                        AstNodeList *stmts = &node->data.func.body->data.list;
+                        if (stmts->count > 0) {
+                            AstNode *last = stmts->items[stmts->count - 1];
+                            if (last->type == NODE_RETURN) {
+                                has_return = true;
+                            }
+                            /* asm block counts as having a return (compiler adds epilogue) */
+                            if (last->type == NODE_ASM_BLOCK) {
+                                has_return = true;
+                            }
                         }
                     }
-                }
-                if (!has_return) {
-                    fprintf(stderr, "Error: function '%.*s' has return type but no return statement\n",
-                        (int)node->data.func.name->data.ident.name.len,
-                        node->data.func.name->data.ident.name.data);
-                    sa->error_count++;
+                    if (!has_return) {
+                        fprintf(stderr, "Error: function '%.*s' has return type but no return statement\n",
+                            (int)node->data.func.name->data.ident.name.len,
+                            node->data.func.name->data.ident.name.data);
+                        sa->error_count++;
+                    }
                 }
             }
 
@@ -375,6 +384,7 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
         }
 
         case NODE_CONST_DECL:
+        case NODE_TYPE_ALIAS:
         case NODE_STRUCT_DECL:
         case NODE_CLASS_DECL:
         case NODE_ENUM_DECL: {
@@ -382,6 +392,10 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             AstNode *name_node = NULL;
             if (node->type == NODE_STRUCT_DECL || node->type == NODE_CLASS_DECL) name_node = node->data.struct_decl.name;
             else if (node->type == NODE_ENUM_DECL) name_node = node->data.enum_decl.name;
+            else if (node->type == NODE_TYPE_ALIAS) {
+                /* Type alias: name is first item in list */
+                if (node->data.list.count > 0) name_node = node->data.list.items[0];
+            }
             else if (node->type == NODE_CONST_DECL) {
                 name_node = node->data.let_decl.name;
                 /* Evaluate const initializer at compile time */
@@ -435,7 +449,25 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
             break;
 
         case NODE_FOR:
-            if (node->data.for_node.var) semantic_visit_node(sa, node->data.for_node.var);
+            /* Declare the loop variable in scope */
+            if (node->data.for_node.var) {
+                const char *vname = arena_strndup(sa->arena,
+                    node->data.for_node.var->data.ident.name.data,
+                    node->data.for_node.var->data.ident.name.len);
+                scope_declare(sa, vname, node->data.for_node.var);
+                semantic_visit_node(sa, node->data.for_node.var);
+            }
+            /* Also declare index variable if present */
+            if (node->data.for_node.index_var) {
+                AstNode *index_var = node->data.for_node.index_var;
+                if (index_var) {
+                    const char *iname = arena_strndup(sa->arena,
+                        index_var->data.ident.name.data,
+                        index_var->data.ident.name.len);
+                    scope_declare(sa, iname, index_var);
+                    semantic_visit_node(sa, index_var);
+                }
+            }
             if (node->data.for_node.iterable) semantic_visit_expr(sa, node->data.for_node.iterable);
             if (node->data.for_node.body) semantic_visit_node(sa, node->data.for_node.body);
             break;
@@ -535,6 +567,26 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
             break;
 
         case NODE_CALL:
+            /* Constructor pattern: TypeName(expr) — skip resolution for primitive type names */
+            if (node->data.call.callee && node->data.call.callee->type == NODE_IDENT &&
+                node->data.call.args.count == 1) {
+                const char *cn = arena_strndup(sa->arena,
+                    node->data.call.callee->data.ident.name.data,
+                    node->data.call.callee->data.ident.name.len);
+                if (strcmp(cn, "string") == 0 ||
+                    strcmp(cn, "u8") == 0 || strcmp(cn, "u16") == 0 ||
+                    strcmp(cn, "u32") == 0 || strcmp(cn, "u64") == 0 ||
+                    strcmp(cn, "i8") == 0 || strcmp(cn, "i16") == 0 ||
+                    strcmp(cn, "i32") == 0 || strcmp(cn, "i64") == 0 ||
+                    strcmp(cn, "f32") == 0 || strcmp(cn, "f64") == 0 ||
+                    strcmp(cn, "bool") == 0 || strcmp(cn, "byte") == 0) {
+                    /* Constructor call — just visit the argument, don't resolve callee */
+                    for (int i = 0; i < node->data.call.args.count; i++) {
+                        semantic_visit_expr(sa, node->data.call.args.items[i]);
+                    }
+                    break;
+                }
+            }
             semantic_visit_expr(sa, node->data.call.callee);
             for (int i = 0; i < node->data.call.args.count; i++) {
                 semantic_visit_expr(sa, node->data.call.args.items[i]);
@@ -575,8 +627,14 @@ void semantic_visit_expr(SemanticAnalyzer *sa, AstNode *node) {
         case NODE_LITERAL_CHAR:
         case NODE_LITERAL_BOOL:
         case NODE_LITERAL_NONE:
-        case NODE_ARRAY_LIT:
         case NODE_ASM_BLOCK:
+            break;
+
+        case NODE_ARRAY_LIT:
+            /* Visit array literal elements for name resolution */
+            for (int i = 0; i < node->data.array_lit.elements.count; i++) {
+                semantic_visit_expr(sa, node->data.array_lit.elements.items[i]);
+            }
             break;
 
         default:
@@ -589,7 +647,6 @@ void semantic_analyze(SemanticAnalyzer *sa, AstNode *program) {
     AstNode *print_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));
     memset(print_decl, 0, sizeof(AstNode));
     print_decl->type = NODE_FUNC_DECL;
-    sa->builtin_print = print_decl;
     scope_declare(sa, "print", print_decl);
 
     AstNode *exit_decl = (AstNode *)arena_alloc(sa->arena, sizeof(AstNode));

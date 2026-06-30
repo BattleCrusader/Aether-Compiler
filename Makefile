@@ -1,7 +1,21 @@
 HOST_CC = gcc
-HOST_CFLAGS = -std=c11 -Wall -Wextra -g -O0 -Iinclude -D_GNU_SOURCE \
+HOST_CFLAGS = -std=c23 -Wall -Wextra -g -O0 -Iinclude -D_GNU_SOURCE \
 	-DLD='"x86_64-elf-ld"' \
 	-DSEGFAULT_HELPER='"$(CURDIR)/build/segfault_helper.o"'
+
+# C transpiler source files
+C_TRANSPILER_SRCS = \
+	src/c_transpiler/c_transpiler.c \
+	src/c_transpiler/c_types.c \
+	src/c_transpiler/c_expr.c \
+	src/c_transpiler/c_stmt.c \
+	src/c_transpiler/c_func.c \
+	src/c_transpiler/c_runtime.c \
+	src/c_transpiler/c_string.c \
+	src/c_transpiler/c_asm.c \
+	src/c_transpiler/c_error.c \
+	src/c_transpiler/c_contract.c \
+	src/c_transpiler/c_target.c
 
 GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -48,10 +62,16 @@ SEGFAULT_HELPER_SRC = src/segfault_helper.c
 SEGFAULT_HELPER_OBJ = build/segfault_helper.o
 
 CORE_OBJS = $(CORE_SRCS:src/%.c=$(BUILD_DIR)/%.o)
+C_TRANSPILER_OBJS = $(C_TRANSPILER_SRCS:src/c_transpiler/%.c=$(BUILD_DIR)/c_transpiler/%.o)
 
 .PHONY: all clean test tokenizer parser-test aether-cli install uninstall install-local
 
 all: tokenizer parser-test aether-cli
+
+# Pattern: compile src/c_transpiler/*.c to build/c_transpiler/*.o
+$(BUILD_DIR)/c_transpiler/%.o: src/c_transpiler/%.c include/aether/c_transpiler.h
+	@mkdir -p $(@D)
+	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
 
 # Pattern: compile src/*.c to build/*.o
 $(BUILD_DIR)/%.o: src/%.c
@@ -77,8 +97,8 @@ $(BUILD_DIR)/aether.o: $(AETHER_MAIN_SRC)
 	@mkdir -p $(@D)
 	$(HOST_CC) $(HOST_CFLAGS) -DGIT_HASH='"$(GIT_HASH)"' -DGIT_BRANCH='"$(GIT_BRANCH)"' -c $< -o $@
 
-$(BUILD_DIR)/aether: $(CORE_OBJS) $(BUILD_DIR)/aether.o $(SEGFAULT_HELPER_OBJ)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(CORE_OBJS) $(BUILD_DIR)/aether.o
+$(BUILD_DIR)/aether: $(CORE_OBJS) $(C_TRANSPILER_OBJS) $(BUILD_DIR)/aether.o $(SEGFAULT_HELPER_OBJ)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(CORE_OBJS) $(C_TRANSPILER_OBJS) $(BUILD_DIR)/aether.o
 
 # Segfault helper — compiled with host CC (needs libSystem for signal/backtrace)
 $(SEGFAULT_HELPER_OBJ): $(SEGFAULT_HELPER_SRC)
@@ -145,11 +165,38 @@ TEST_FIXTURES = \
 	tests/fixtures/test_null_concat.ae \
 	tests/fixtures/test_logical_keywords.ae \
 	tests/fixtures/test_aelib_import.ae \
-	tests/fixtures/test_std_test.ae
+	tests/fixtures/test_std_test.ae \
+	tests/fixtures/test_variadic.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \
 	tests/fixtures/lib_math.ae
+
+# libaether.aelib — proper static library archive from individual .o files
+LIBAETHER_SRCS = std/arch.ae std/asm.ae std/collections.ae std/elf.ae std/fs.ae std/io.ae std/math.ae std/mem.ae std/serial.ae std/str.ae std/test.ae
+LIBAETHER_OBJS = $(LIBAETHER_SRCS:std/%.ae=$(BUILD_DIR)/lib/%.o)
+LIBAETHER_AELIB = build/lib/libaether.aelib
+
+# Compile each .ae to its own .o for the library
+$(BUILD_DIR)/lib/%.o: std/%.ae aether-cli
+	@mkdir -p $(@D) /tmp/kernel
+	./$(BUILD_DIR)/aether --target lib $< -o $@
+	@test -f $@ || { echo "ERROR: $@ was not created"; exit 1; }
+
+# Archive all .o files into .aelib (static library)
+$(LIBAETHER_AELIB): $(LIBAETHER_OBJS)
+	@echo "=== Building libaether.aelib ==="
+	@mkdir -p build/lib
+	@ar rcs $@ $^
+	@echo "  libaether.aelib built OK"
+
+# .aelib library fixtures — must be built before test-host
+AELIB_FIXTURES = \
+	tests/fixtures/lib_math.ae
+
+# Each .aelib fixture gets its own .o
+tests/fixtures/%.aelib: tests/fixtures/%.ae aether-cli
+	./$(BUILD_DIR)/aether --target lib $< -o $@ 2>/dev/null
 
 # Layout test fixtures — compiled as flat binary, verified by size
 LAYOUT_FIXTURES = \
@@ -164,7 +211,7 @@ NEW_TARGET_FIXTURES = \
 	tests/fixtures/test_binary_target.ae \
 	tests/fixtures/test_boot_target.ae
 
-test-host: aether-cli
+test-host: aether-cli $(LIBAETHER_AELIB)
 	@echo "=== Building .aelib library fixtures ==="
 	@for fixture in $(AELIB_FIXTURES); do \
 		name=$$(basename $$fixture .ae); \
@@ -211,54 +258,38 @@ test-layout: aether-cli
 	[ $$pass -eq $$total ]
 
 # Install the aether compiler and standard library to the system
-install: aether-cli
+install: aether-cli $(LIBAETHER_AELIB)
 	@echo "Installing Aether compiler..."
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(BUILD_DIR)/aether $(DESTDIR)$(BINDIR)/aether
 	@echo "  -> $(DESTDIR)$(BINDIR)/aether"
 	@echo "Installing standard library..."
 	install -d $(DESTDIR)$(LIBDIR)
-	for f in std/*.ae; do \
-		install -m 644 $$f $(DESTDIR)$(LIBDIR)/$$(basename $$f); \
-		echo "  -> $(DESTDIR)$(LIBDIR)/$$(basename $$f)"; \
-	done
-	@echo "Installing header files..."
-	install -d $(DESTDIR)$(LIBDIR)/include
-	for f in include/aether/*.h; do \
-		install -m 644 $$f $(DESTDIR)$(LIBDIR)/include/$$(basename $$f); \
-		echo "  -> $(DESTDIR)$(LIBDIR)/include/$$(basename $$f)"; \
-	done
+	install -m 644 $(LIBAETHER_AELIB) $(DESTDIR)$(LIBDIR)/libaether.aelib
+	@echo "  -> $(DESTDIR)$(LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "Aether compiler installed successfully."
 	@echo "  Binary:  $(DESTDIR)$(BINDIR)/aether"
-	@echo "  Stdlib:  $(DESTDIR)$(LIBDIR)/"
+	@echo "  Stdlib:  $(DESTDIR)$(LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "To use: aether --help"
 	@echo "To compile: aether build source.ae"
 	@echo "To run:    aether run source.ae"
 
 # Install locally to ~/.local (no sudo needed)
-install-local: aether-cli
+install-local: aether-cli $(LIBAETHER_AELIB)
 	@echo "Installing Aether compiler locally..."
 	install -d $(LOCAL_BINDIR)
 	install -m 755 $(BUILD_DIR)/aether $(LOCAL_BINDIR)/aether
 	@echo "  -> $(LOCAL_BINDIR)/aether"
 	@echo "Installing standard library..."
 	install -d $(LOCAL_LIBDIR)
-	for f in std/*.ae; do \
-		install -m 644 $$f $(LOCAL_LIBDIR)/$$(basename $$f); \
-		echo "  -> $(LOCAL_LIBDIR)/$$(basename $$f)"; \
-	done
-	@echo "Installing header files..."
-	install -d $(LOCAL_LIBDIR)/include
-	for f in include/aether/*.h; do \
-		install -m 644 $$f $(LOCAL_LIBDIR)/include/$$(basename $$f); \
-		echo "  -> $(LOCAL_LIBDIR)/include/$$(basename $$f)"; \
-	done
+	install -m 644 $(LIBAETHER_AELIB) $(LOCAL_LIBDIR)/libaether.aelib
+	@echo "  -> $(LOCAL_LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "Aether compiler installed locally."
 	@echo "  Binary:  $(LOCAL_BINDIR)/aether"
-	@echo "  Stdlib:  $(LOCAL_LIBDIR)/"
+	@echo "  Stdlib:  $(LOCAL_LIBDIR)/libaether.aelib"
 	@echo ""
 	@echo "Make sure $(LOCAL_BINDIR) is in your PATH."
 	@echo "To use: aether --help"

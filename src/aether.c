@@ -17,6 +17,7 @@
 #include "aether/parser.h"
 #include "aether/semantic.h"
 #include "aether/codegen.h"
+#include "aether/c_transpiler.h"
 #include "aether/optimizer.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,8 +35,6 @@ static void usage(const char *prog) {
     fprintf(stderr, "  %s run <file.ae> [args]             Compile and run immediately\n", prog);
     fprintf(stderr, "  %s init|new <project-name>          Scaffold a new project\n", prog);
     fprintf(stderr, "  %s fmt <file.ae>                    Format source code\n", prog);
-    fprintf(stderr, "  %s asm [options] <file.ae>          Show generated assembly\n", prog);
-    fprintf(stderr, "  %s inspect <file>                   Inspect compiled binary\n", prog);
     fprintf(stderr, "  %s doc <file.ae>                    Generate documentation\n", prog);
     fprintf(stderr, "\nOptions:\n");
     fprintf(stderr, "  -o, --output <file>      Output file (default: /tmp/<name>)\n");
@@ -48,21 +47,17 @@ static void usage(const char *prog) {
     fprintf(stderr, "    module                 Aether OS .ko module\n");
     fprintf(stderr, "    binary                 /bin/ userland ELF at 0x2000000\n");
     fprintf(stderr, "    boot                   Flat binary boot sector\n");
-    fprintf(stderr, "    asm-x86_64             Emit x86_64 NASM assembly listing\n");
-    fprintf(stderr, "    asm-arm64              Emit ARM64 assembly listing\n");
-    fprintf(stderr, "    asm-riscv64            Emit RISC-V assembly listing\n");
     fprintf(stderr, "    universal              Universal binary (x86_64 + ARM64)\n");
     fprintf(stderr, "    universal-all           Universal binary (all architectures)\n");
     fprintf(stderr, "    lib                    .aelib library archive\n");
     fprintf(stderr, "  -L, --linker-script <f>  Custom linker script\n");
-    fprintf(stderr, "  -S                       Stop after assembly (emit .asm)\n");
+    fprintf(stderr, "  -S                       Stop after C source emission (emit .c)\n");
     fprintf(stderr, "  -O0                      No optimization (fastest compile)\n");
     fprintf(stderr, "  -O1                      Basic optimization (default)\n");
     fprintf(stderr, "  -O2                      Full optimization\n");
     fprintf(stderr, "  -Oz                      Optimize for size\n");
     fprintf(stderr, "  --dump-ast               Print AST and exit\n");
     fprintf(stderr, "  --dump-tokens            Print tokens and exit\n");
-    fprintf(stderr, "  --dump-opt               Print optimized AST\n");
     fprintf(stderr, "  --version                Print version and exit\n");
     fprintf(stderr, "  -v, --verbose            Verbose output\n");
 }
@@ -728,7 +723,6 @@ int main(int argc, char **argv) {
     int verbose = 0;
     int run_mode = 0;
     int opt_level = 1; /* -O1 default */
-    int dump_opt = 0;
     Target target = TARGET_HOST; /* default: auto-detect */
     const char *linker_script = NULL;
 
@@ -822,8 +816,6 @@ int main(int argc, char **argv) {
             opt_level = 2;
         } else if (strcmp(argv[i], "-Oz") == 0) {
             opt_level = 3;
-        } else if (strcmp(argv[i], "--dump-opt") == 0) {
-            dump_opt = 1;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             usage(argv[0]);
             return 0;
@@ -1337,10 +1329,6 @@ int main(int argc, char **argv) {
         }
         /* -O2: all optimizations (default init) */
         program = optimize(program, sa_arena, &opt_cfg);
-        if (dump_opt) {
-            printf("=== Optimized AST ===\n");
-            ast_dump(program, 0);
-        }
         if (verbose) printf("Optimization complete (%d decls)\n", program->data.list.count);
     }
     if (verbose) printf("After opt: %d decls\n", program->data.list.count);
@@ -1357,137 +1345,127 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Phase 4: Code generation */
-    Arena *cg_arena = arena_create();
-    Codegen *cg = codegen_create(cg_arena);
-    codegen_set_target(cg, target);
-    cg->linker_script = linker_script;
-    cg->aelib_output = output_file;
-    codegen_generate(cg, program);
+    /* Phase 4: Code generation — C transpiler (default), NASM for asm targets */
+    if (target == TARGET_ASM_X86_64 || target == TARGET_ASM_ARM64 || target == TARGET_ASM_RISCV64) {
+        /* These targets use the NASM codegen path (handled in codegen.c) */
+        /* Fall through to the existing NASM codegen below */
+    } else {
+        Arena *c_arena = arena_create();
+        CCodegen *cg = c_create(c_arena, target, opt_level);
 
-    /* Register any imported .aelib paths for linking */
-    for (int i = 0; i < aelib_import_count; i++) {
-        codegen_add_aelib_import(cg, aelib_import_paths[i]);
-    }
+        /* Generate C code to a temp file */
+        char c_path[1024];
+        snprintf(c_path, sizeof(c_path), "%s.c", output_file ? output_file : "/tmp/aether_out");
 
-    if (verbose) {
-        printf("Target: %s\n", target_name(cg->target));
-    }
-
-    /* For --target lib: extract metadata from AST */
-    if (target == TARGET_LIB) {
-        if (codegen_extract_metadata(cg, program) != 0) {
-            fprintf(stderr, "Metadata extraction failed\n");
+        FILE *c_file = fopen(c_path, "w");
+        if (!c_file) {
+            fprintf(stderr, "Error: cannot open %s for writing\n", c_path);
+            arena_destroy(c_arena);
             parser_destroy(parser);
             free(source);
             arena_destroy(sa_arena);
-            arena_destroy(cg_arena);
             return 1;
         }
-        if (verbose) printf("Metadata extracted for .aelib library\n");
-    }
 
-    /* Determine output filenames */
-    char asm_file[1024];
-    char temp_asm_buf[256]; /* for TARGET_LIB only */
-
-    bool is_lib_target = (target == TARGET_LIB);
-
-    if (is_lib_target) {
-        /* For library target, write assembly to a temp path, output to .aelib */
-        snprintf(temp_asm_buf, sizeof(temp_asm_buf), "/tmp/kernel/aether_lib_XXXXXX");
-        int fd = mkstemp(temp_asm_buf);
-        if (fd < 0) {
-            fprintf(stderr, "Error: cannot create temp assembly file\n");
+        if (!c_generate(cg, program, c_file)) {
+            fprintf(stderr, "C code generation failed\n");
+            fclose(c_file);
+            arena_destroy(c_arena);
+            parser_destroy(parser);
+            free(source);
+            arena_destroy(sa_arena);
             return 1;
         }
-        close(fd);
-        /* mkstemp gives us /tmp/kernel/aether_lib_<rand>, add .asm suffix */
-        size_t len = strlen(temp_asm_buf);
-        if (len + 4 >= sizeof(temp_asm_buf)) {
-            fprintf(stderr, "Error: temp path too long\n");
-            return 1;
-        }
-        memcpy(temp_asm_buf + len, ".asm", 5);
-        snprintf(asm_file, sizeof(asm_file), "%s", temp_asm_buf);
-    } else if (stop_after_asm) {
-        snprintf(asm_file, sizeof(asm_file), "%s", output_file);
-    } else {
-        /* Use /tmp/kernel/ for intermediate files */
-        unsigned long hash = 5381;
-        for (const char *p = input_file; *p; p++)
-            hash = ((hash << 5) + hash) + (unsigned char)*p;
-        snprintf(asm_file, sizeof(asm_file), "/tmp/kernel/aether_%lx.asm", hash);
-    }
+        fclose(c_file);
 
-    /* Write .asm file */
-    if (codegen_write_asm(cg, asm_file) != 0) {
-        fprintf(stderr, "Error: cannot write '%s'\n", asm_file);
+        if (stop_after_asm) {
+            /* Just emit C source, don't compile */
+            if (verbose) printf("Wrote %s\n", c_path);
+        } else {
+            /* Compile C to native binary */
+            if (c_compile(cg, c_path, output_file) != 0) {
+                fprintf(stderr, "C compilation failed\n");
+                arena_destroy(c_arena);
+                parser_destroy(parser);
+                free(source);
+                arena_destroy(sa_arena);
+                return 1;
+            }
+            /* Clean up .c file */
+            remove(c_path);
+        }
+
+        if (verbose) printf("C compilation successful\n");
+
         parser_destroy(parser);
         free(source);
         arena_destroy(sa_arena);
-        arena_destroy(cg_arena);
-        return 1;
-    }
+        arena_destroy(c_arena);
 
-    if (verbose) printf("Wrote %s\n", asm_file);
+        if (run_mode) {
+            if (verbose) printf("Running: %s\n", output_file);
+            char cmd[4096];
+            snprintf(cmd, sizeof(cmd), "%s", output_file);
+            int ret = system(cmd);
+            return WEXITSTATUS(ret);
+        }
 
-    if (stop_after_asm) {
-        if (verbose) printf("Stopping after assembly (-S flag)\n");
-        parser_destroy(parser);
-        free(source);
-        arena_destroy(sa_arena);
-        arena_destroy(cg_arena);
+        printf("Compilation successful: %s -> %s\n", input_file, output_file);
         return 0;
     }
 
-    /* Phase 5: Assemble and link */
-    int ret = codegen_assemble(cg, asm_file, output_file);
-    if (ret != 0) {
-        fprintf(stderr, "Assembly/link failed\n");
-        parser_destroy(parser);
-        free(source);
-        arena_destroy(sa_arena);
-        arena_destroy(cg_arena);
-        return 1;
+    /* NASM codegen path for lib/asm/freestanding targets */
+    {
+        Arena *cg_arena = arena_create();
+        Codegen *cg = codegen_create(cg_arena);
+        codegen_set_target(cg, target);
+        codegen_generate(cg, program);
+
+        /* Extract metadata for .aelib library target */
+        if (target == TARGET_LIB) {
+            codegen_extract_metadata(cg, program);
+        }
+
+        const char *asm_text = codegen_get_asm(cg);
+        if (!asm_text) {
+            fprintf(stderr, "Code generation failed\n");
+            parser_destroy(parser); free(source);
+            arena_destroy(sa_arena); arena_destroy(cg_arena);
+            return 1;
+        }
+
+        /* Write assembly to temp file */
+        char asm_path[1024];
+        snprintf(asm_path, sizeof(asm_path), "%s.asm", output_file ? output_file : "/tmp/aether_out");
+        FILE *af = fopen(asm_path, "w");
+        if (!af) { fprintf(stderr, "Error: cannot write '%s'\n", asm_path); return 1; }
+        fwrite(asm_text, 1, strlen(asm_text), af);
+        fclose(af);
+
+        /* Assemble and link via codegen.c's assemble function */
+        int ret = codegen_assemble(cg, asm_path, output_file);
+        remove(asm_path);
+
+        if (ret != 0) {
+            fprintf(stderr, "Assembly/link failed\n");
+            parser_destroy(parser); free(source);
+            arena_destroy(sa_arena); arena_destroy(cg_arena);
+            return 1;
+        }
+
+        if (verbose) printf("NASM compilation successful\n");
+        parser_destroy(parser); free(source);
+        arena_destroy(sa_arena); arena_destroy(cg_arena);
+
+        if (run_mode) {
+            if (verbose) printf("Running: %s\n", output_file);
+            char cmd[4096];
+            snprintf(cmd, sizeof(cmd), "%s", output_file);
+            int r = system(cmd);
+            return WEXITSTATUS(r);
+        }
+
+        printf("Compilation successful: %s -> %s\n", input_file, output_file);
+        return 0;
     }
-
-    if (verbose) printf("Wrote %s\n", output_file);
-
-    /* Cleanup temp files */
-    remove(asm_file);
-
-    parser_destroy(parser);
-    free(source);
-    arena_destroy(sa_arena);
-    arena_destroy(cg_arena);
-
-    printf("Compilation successful: %s -> %s\n", input_file, output_file);
-
-    if (run_mode) {
-        if (verbose) printf("Running: %s\n", output_file);
-        char cmd[4096];
-        snprintf(cmd, sizeof(cmd), "%s", output_file);
-        /* Forward any extra args after the source file to the binary */
-        if (run_args_start > 0) {
-            for (int i = run_args_start; i < argc; i++) {
-                size_t cur = strlen(cmd);
-                snprintf(cmd + cur, sizeof(cmd) - cur, " %s", argv[i]);
-            }
-        }
-        int ret = system(cmd);
-        /* system() returns wait status — extract actual exit code */
-        int exit_code = -1;
-        if (WIFEXITED(ret)) {
-            exit_code = WEXITSTATUS(ret);
-        }
-        if (exit_code != 0) {
-            fprintf(stderr, "Program exited with code %d\n", exit_code);
-        }
-        /* Clean up the temp binary immediately after running */
-        remove(output_file);
-        return exit_code;
-    }
-
-    return 0;
 }

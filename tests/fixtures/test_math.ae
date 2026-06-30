@@ -1,25 +1,145 @@
-# test_math.ae — arithmetic operations: add, sub, mul, div, mod, cmp
-@test(expect=165)
-func main(): u64 {
-    # addition
-    let a = 10 + 20    # 30
-    # subtraction
-    let b = 50 - 15    # 35
-    # multiplication
-    let c = 7 * 8      # 56
-    # division
-    let d = 100 / 3    # 33
-    # modulo
-    let e = 17 % 5     # 2
-    # comparisons: each returns 0 or 1
-    let f = (42 == 42)  # 1
-    let g = (42 != 99)  # 1
-    let h = (10 < 20)   # 1
-    let i = (30 > 10)   # 1
-    let j = (5 <= 5)    # 1
-    let k = (5 >= 5)    # 1
-    # negation
-    let l = -(-3)       # 3
-    # return sum: 30+35+56+33+2+1+1+1+1+1+1+3
-    return a + b + c + d + e + f + g + h + i + j + k + l
+// test_math.ae — comprehensive tests for std/math.ae
+// Tests: absoluteValue, min, max, clamp, integerSquareRoot, power,
+//        isPrime, greatestCommonDivisor, leastCommonMultiple,
+//        factorial, fibonacci, isEven, isOdd, lerp, mapRange
+
+import "std/test"
+import "std/math"
+
+@test
+func main() {
+    // absoluteValue
+    assertEquals(absoluteValue(5), 5, "absoluteValue positive")
+    assertEquals(absoluteValue(-5), 5, "absoluteValue negative")
+    assertEquals(absoluteValue(0), 0, "absoluteValue zero")
+
+    // min
+    assertEquals(min(3, 7), 3, "min first smaller")
+    assertEquals(min(7, 3), 3, "min second smaller")
+    assertEquals(min(5, 5), 5, "min equal")
+
+    // max
+    assertEquals(max(3, 7), 7, "max first larger")
+    assertEquals(max(7, 3), 7, "max second larger")
+    assertEquals(max(5, 5), 5, "max equal")
+
+    // clamp
+    assertEquals(clamp(5, 0, 10), 5, "clamp within range")
+    assertEquals(clamp(-5, 0, 10), 0, "clamp below range")
+    assertEquals(clamp(15, 0, 10), 10, "clamp above range")
+    assertEquals(clamp(0, 0, 10), 0, "clamp at lower bound")
+    assertEquals(clamp(10, 0, 10), 10, "clamp at upper bound")
+
+    // integerSquareRoot
+    assertEquals(integerSquareRoot(0), 0, "integerSquareRoot 0")
+    assertEquals(integerSquareRoot(1), 1, "integerSquareRoot 1")
+    assertEquals(integerSquareRoot(4), 2, "integerSquareRoot 4")
+    assertEquals(integerSquareRoot(9), 3, "integerSquareRoot 9")
+    assertEquals(integerSquareRoot(16), 4, "integerSquareRoot 16")
+    assertEquals(integerSquareRoot(25), 5, "integerSquareRoot 25")
+    assertEquals(integerSquareRoot(100), 10, "integerSquareRoot 100")
+    assertEquals(integerSquareRoot(144), 12, "integerSquareRoot 144")
+    assertEquals(integerSquareRoot(2), 1, "integerSquareRoot 2 (floor)")
+    assertEquals(integerSquareRoot(10), 3, "integerSquareRoot 10 (floor)")
+
+    // power
+    assertEquals(power(2, 0), 1, "power exponent 0")
+    assertEquals(power(2, 1), 2, "power exponent 1")
+    assertEquals(power(2, 3), 8, "power 2^3")
+    assertEquals(power(3, 3), 27, "power 3^3")
+    assertEquals(power(10, 2), 100, "power 10^2")
+    assertEquals(power(5, 4), 625, "power 5^4")
+    assertEquals(power(1, 100), 1, "power 1^n")
+
+    // isPrime
+    assertTrue(!isPrime(0), "isPrime 0 false")
+    assertTrue(!isPrime(1), "isPrime 1 false")
+    assertTrue(isPrime(2), "isPrime 2 true")
+    assertTrue(isPrime(3), "isPrime 3 true")
+    assertTrue(!isPrime(4), "isPrime 4 false")
+    assertTrue(isPrime(5), "isPrime 5 true")
+    assertTrue(!isPrime(6), "isPrime 6 false")
+    assertTrue(isPrime(7), "isPrime 7 true")
+    assertTrue(!isPrime(9), "isPrime 9 false")
+    assertTrue(isPrime(11), "isPrime 11 true")
+    assertTrue(isPrime(13), "isPrime 13 true")
+    assertTrue(!isPrime(15), "isPrime 15 false")
+    assertTrue(isPrime(17), "isPrime 17 true")
+    assertTrue(isPrime(19), "isPrime 19 true")
+    assertTrue(!isPrime(21), "isPrime 21 false")
+    assertTrue(isPrime(97), "isPrime 97 true")
+    assertTrue(!isPrime(100), "isPrime 100 false")
+
+    // greatestCommonDivisor
+    assertEquals(greatestCommonDivisor(12, 8), 4, "gcd 12,8")
+    assertEquals(greatestCommonDivisor(54, 24), 6, "gcd 54,24")
+    assertEquals(greatestCommonDivisor(7, 13), 1, "gcd 7,13 (coprime)")
+    assertEquals(greatestCommonDivisor(100, 25), 25, "gcd 100,25")
+    assertEquals(greatestCommonDivisor(0, 5), 5, "gcd 0,5")
+    assertEquals(greatestCommonDivisor(5, 0), 5, "gcd 5,0")
+
+    // leastCommonMultiple
+    assertEquals(leastCommonMultiple(12, 8), 24, "lcm 12,8")
+    assertEquals(leastCommonMultiple(7, 13), 91, "lcm 7,13")
+    assertEquals(leastCommonMultiple(4, 6), 12, "lcm 4,6")
+    assertEquals(leastCommonMultiple(0, 5), 0, "lcm 0,5")
+    assertEquals(leastCommonMultiple(5, 0), 0, "lcm 5,0")
+    assertEquals(leastCommonMultiple(3, 5), 15, "lcm 3,5")
+
+    // --- New functions ---
+
+    // factorial
+    assertEquals(factorial(0), 1, "factorial 0")
+    assertEquals(factorial(1), 1, "factorial 1")
+    assertEquals(factorial(2), 2, "factorial 2")
+    assertEquals(factorial(3), 6, "factorial 3")
+    assertEquals(factorial(4), 24, "factorial 4")
+    assertEquals(factorial(5), 120, "factorial 5")
+    assertEquals(factorial(6), 720, "factorial 6")
+    assertEquals(factorial(10), 3628800, "factorial 10")
+
+    // fibonacci
+    assertEquals(fibonacci(0), 0, "fibonacci 0")
+    assertEquals(fibonacci(1), 1, "fibonacci 1")
+    assertEquals(fibonacci(2), 1, "fibonacci 2")
+    assertEquals(fibonacci(3), 2, "fibonacci 3")
+    assertEquals(fibonacci(4), 3, "fibonacci 4")
+    assertEquals(fibonacci(5), 5, "fibonacci 5")
+    assertEquals(fibonacci(6), 8, "fibonacci 6")
+    assertEquals(fibonacci(7), 13, "fibonacci 7")
+    assertEquals(fibonacci(10), 55, "fibonacci 10")
+    assertEquals(fibonacci(20), 6765, "fibonacci 20")
+
+    // isEven
+    assertTrue(isEven(0), "isEven 0")
+    assertTrue(isEven(2), "isEven 2")
+    assertTrue(isEven(100), "isEven 100")
+    assertTrue(!isEven(1), "isEven 1 false")
+    assertTrue(!isEven(3), "isEven 3 false")
+    assertTrue(!isEven(99), "isEven 99 false")
+
+    // isOdd
+    assertTrue(isOdd(1), "isOdd 1")
+    assertTrue(isOdd(3), "isOdd 3")
+    assertTrue(isOdd(99), "isOdd 99")
+    assertTrue(!isOdd(0), "isOdd 0 false")
+    assertTrue(!isOdd(2), "isOdd 2 false")
+    assertTrue(!isOdd(100), "isOdd 100 false")
+
+    // lerp
+    assertEquals(lerp(0, 10, 0), 0, "lerp factor 0")
+    assertEquals(lerp(0, 10, 1), 10, "lerp factor 1")
+    assertEquals(lerp(0, 10, 2), 20, "lerp factor 2")
+    assertEquals(lerp(10, 20, 0), 10, "lerp start non-zero")
+    assertEquals(lerp(10, 20, 1), 20, "lerp end non-zero")
+    assertEquals(lerp(0, 100, 3), 300, "lerp factor 3")
+
+    // mapRange
+    assertEquals(mapRange(5, 0, 10, 0, 100), 50, "mapRange midpoint")
+    assertEquals(mapRange(0, 0, 10, 0, 100), 0, "mapRange input start")
+    assertEquals(mapRange(10, 0, 10, 0, 100), 100, "mapRange input end")
+    assertEquals(mapRange(5, 0, 10, 100, 200), 150, "mapRange shifted output")
+    assertEquals(mapRange(0, 0, 10, 100, 200), 100, "mapRange output start")
+    assertEquals(mapRange(10, 0, 10, 100, 200), 200, "mapRange output end")
+    assertEquals(mapRange(5, 0, 10, 0, 50), 25, "mapRange smaller output")
 }

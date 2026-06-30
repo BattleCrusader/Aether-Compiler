@@ -1,0 +1,45 @@
+// test_spec_03_operators_range.ae — Section 3.4: Range Expressions
+// Tests: .. (half-open), ..= (inclusive)
+
+import "std/test"
+
+// Helper function for range match
+func classify(x: u64): u64 {
+    return match x {
+        case 1..5 -> 10
+        case 5..=10 -> 20
+        case _ -> 0
+    }
+}
+
+@test
+func main(): void {
+    // Half-open range in for loop
+    let mut sum1: u64 = 0
+    for i in 0..10 {
+        sum1 = sum1 + i
+    }
+    // sum1 = 0+1+2+...+9 = 45
+
+    // Inclusive range in for loop
+    let mut sum2: u64 = 0
+    for i in 0..=5 {
+        sum2 = sum2 + i
+    }
+    // sum2 = 0+1+2+3+4+5 = 15
+
+    let r1 = classify(3)   // 10 (1..5)
+    let r2 = classify(5)   // 20 (5..=10, inclusive)
+    let r3 = classify(10)  // 20 (5..=10)
+    let r4 = classify(0)   // 0 (default)
+    let r5 = classify(99)  // 0 (default)
+
+    // Verify with assertions
+    assertEquals(45, sum1, "0..10 sum should be 45")
+    assertEquals(15, sum2, "0..=5 sum should be 15")
+    assertEquals(10, r1, "classify(3) in 1..5 should be 10")
+    assertEquals(20, r2, "classify(5) in 5..=10 should be 20")
+    assertEquals(20, r3, "classify(10) in 5..=10 should be 20")
+    assertEquals(0, r4, "classify(0) default should be 0")
+    assertEquals(0, r5, "classify(99) default should be 0")
+}

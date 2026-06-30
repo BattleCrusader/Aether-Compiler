@@ -25,7 +25,7 @@ static int mkdir_p(const char *path) {
     return mkdir(tmp, 0755);
 }
 
-#define INITIAL_CAP 65536
+#define INITIAL_CAP 262144
 
 /* Forward declarations */
 typedef struct VarSlot VarSlot;
@@ -257,6 +257,18 @@ static char *decl_name(AstNode *node) {
                 return result ? result : strdup("");
             }
             break;
+        case NODE_TYPE_ALIAS:
+            /* Type alias: name is first item in list */
+            if (node->data.list.count > 0 && node->data.list.items[0]->type == NODE_IDENT) {
+                StringView *sv = &node->data.list.items[0]->data.ident.name;
+                char *result = (char *)malloc(sv->len + 1);
+                if (result) {
+                    memcpy(result, sv->data, sv->len);
+                    result[sv->len] = '\0';
+                }
+                return result ? result : strdup("");
+            }
+            break;
         default:
             break;
     }
@@ -277,6 +289,8 @@ static bool decl_is_pub(AstNode *node) {
             return node->data.enum_decl.is_pub;
         case NODE_CONST_DECL:
             return node->data.let_decl.is_mut; /* const is always accessible */
+        case NODE_TYPE_ALIAS:
+            return true; /* type aliases are always accessible */
         default:
             return false;
     }
@@ -779,6 +793,10 @@ static bool is_numeric_expr(AstNode *node) {
     }
     if (node->type == NODE_IDENT && node->data.ident.resolved) {
         AstNode *decl = node->data.ident.resolved;
+        /* Variadic params are array pointers, not numeric */
+        if (decl->type == NODE_PARAM && decl->data.param.is_varargs) return false;
+        /* For-loop variables are always u64 */
+        if (decl->type == NODE_IDENT) return true;
         AstNode *type_node = NULL;
         if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
         else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
@@ -792,6 +810,10 @@ static bool is_numeric_expr(AstNode *node) {
         if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
             return is_numeric_expr(decl->data.let_decl.value);
         }
+    }
+    /* Also check by name lookup for idents that weren't resolved by semantic analysis */
+    if (node->type == NODE_IDENT && !node->data.ident.resolved) {
+        return true;
     }
     /* Function calls that return numeric types */
     if (node->type == NODE_CALL && node->data.call.callee &&
@@ -828,9 +850,19 @@ static bool is_string_expr(AstNode *node) {
         if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
             return type_node->data.type_node.prim == PRIM_STRING;
         }
-        /* No type annotation — check if initializer is a string expression */
         if (!type_node && decl->type == NODE_LET && decl->data.let_decl.value) {
             return is_string_expr(decl->data.let_decl.value);
+        }
+    }
+    /* Function calls that return string types */
+    if (node->type == NODE_CALL && node->data.call.callee &&
+        node->data.call.callee->type == NODE_IDENT) {
+        if (node->data.call.callee->data.ident.resolved &&
+            node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+            AstNode *ret_type = node->data.call.callee->data.ident.resolved->data.func.return_type;
+            if (ret_type && ret_type->type == NODE_TYPE_PRIMITIVE) {
+                return ret_type->data.type_node.prim == PRIM_STRING;
+            }
         }
     }
     return false;
@@ -1076,7 +1108,39 @@ static void frame_collect(Arena *a, AstNode *node, VarSlot **list, int *offset) 
             break;
 
         case NODE_FOR:
-            frame_collect(a, node->data.for_node.var, list, offset);
+            /* Create a stack slot for the loop variable (it's an ident, not a let) */
+            if (node->data.for_node.var && node->data.for_node.var->type == NODE_IDENT) {
+                *offset += 8;
+                VarSlot *slot = (VarSlot *)arena_alloc(a, sizeof(VarSlot));
+                slot->node = node->data.for_node.var;
+                slot->name = arena_strndup(a,
+                    node->data.for_node.var->data.ident.name.data,
+                    node->data.for_node.var->data.ident.name.len);
+                slot->stack_offset = -(*offset);
+                slot->size = 8;
+                slot->actual_size = 8;
+                slot->prim = PRIM_U64;
+                slot->next = *list;
+                *list = slot;
+            }
+            /* Also create a slot for the index variable if present */
+            if (node->data.for_node.index_var) {
+                AstNode *index_var = node->data.for_node.index_var;
+                if (index_var && index_var->type == NODE_IDENT) {
+                    *offset += 8;
+                    VarSlot *slot = (VarSlot *)arena_alloc(a, sizeof(VarSlot));
+                    slot->node = index_var;
+                    slot->name = arena_strndup(a,
+                        index_var->data.ident.name.data,
+                        index_var->data.ident.name.len);
+                    slot->stack_offset = -(*offset);
+                    slot->size = 8;
+                    slot->actual_size = 8;
+                    slot->prim = PRIM_U64;
+                    slot->next = *list;
+                    *list = slot;
+                }
+            }
             frame_collect(a, node->data.for_node.iterable, list, offset);
             frame_collect(a, node->data.for_node.body, list, offset);
             break;
@@ -1207,6 +1271,17 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             break;
         }
 
+        case NODE_LITERAL_FLOAT: {
+            /* Float literal: store the 64-bit pattern in the constant pool and load it.
+               For now, just emit the integer pattern of the float bits. */
+            uint64_t val;
+            memcpy(&val, &node->data.literal.float_val, sizeof(val));
+            char buf[64];
+            snprintf(buf, sizeof(buf), "mov rax, 0x%016llx", (unsigned long long)val);
+            cg_inst(cg, buf);
+            break;
+        }
+
         case NODE_LITERAL_BOOL:
             cg_inst1(cg, "mov", node->data.literal.bool_val ? "rax, 1" : "rax, 0");
             break;
@@ -1225,10 +1300,9 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_LITERAL_CHAR:
-            cg_inst1(cg, "movzx", "eax, byte 0");
             {
                 char buf[32];
-                snprintf(buf, sizeof(buf), "mov rax, %u", (unsigned)node->data.literal.char_val);
+                snprintf(buf, sizeof(buf), "mov eax, %u", (unsigned)node->data.literal.char_val);
                 cg_inst(cg, buf);
             }
             break;
@@ -1316,6 +1390,9 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 /* Try to infer from the variable's declared type */
                 /* For now, check if the variable has a type annotation */
                 /* We'll look up the let declaration */
+                if (is_string_expr(node->data.index.target)) {
+                    elem_size = 1;
+                }
             }
             /* Scale index by element size */
             switch (elem_size) {
@@ -1326,7 +1403,13 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 default:
                     cg_inst(cg, "shl rcx, 3"); cg_inst1(cg, "add", "rax, rcx"); break;
             }
-            cg_inst(cg, "mov rax, [rax]");
+            /* Read element from computed address */
+            switch (elem_size) {
+                case 1: cg_inst(cg, "movzx eax, byte [rax]"); break;
+                case 2: cg_inst(cg, "movzx eax, word [rax]"); break;
+                case 4: cg_inst(cg, "mov eax, [rax]"); break;
+                default: cg_inst(cg, "mov rax, [rax]"); break;
+            }
             break;
         }
 
@@ -1337,8 +1420,63 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_ARRAY_LIT: {
-            cg_warn(cg, node, "array literal not yet implemented");
-            cg_inst1(cg, "xor", "rax, rax");
+            /* Array literal: [1, 2, 3]
+               Layout on stack: [8 bytes: count][elem0][elem1]...[elemN]
+               Returns pointer to the array (address of count field) in rax. */
+            int count = node->data.array_lit.elements.count;
+            if (count == 0) {
+                cg_inst1(cg, "xor", "rax, rax");
+                break;
+            }
+
+            /* Determine element size from first element's type */
+            int elem_size = 8; /* default */
+            if (count > 0) {
+                AstNode *first = node->data.array_lit.elements.items[0];
+                /* Try to infer element size from the expression type */
+                if (first->type == NODE_LITERAL_INT) elem_size = 8;
+                else if (first->type == NODE_LITERAL_BOOL) elem_size = 1;
+                else if (first->type == NODE_LITERAL_CHAR) elem_size = 4;
+                else if (first->type == NODE_LITERAL_FLOAT) elem_size = 8;
+            }
+
+            /* Total size: 8 bytes for count + count * elem_size, rounded up to 16 */
+            int total_size = 8 + count * elem_size;
+            int aligned_size = ((total_size + 15) / 16) * 16;
+
+            /* Allocate stack space: sub rsp, aligned_size */
+            char buf[64];
+            snprintf(buf, sizeof(buf), "sub rsp, %d", aligned_size);
+            cg_inst(cg, buf);
+
+            /* Store count header at [rsp] */
+            snprintf(buf, sizeof(buf), "mov qword [rsp], %d", count);
+            cg_inst(cg, buf);
+
+            /* Evaluate each element and store it */
+            int offset = 8; /* start after count header */
+            for (int i = 0; i < count; i++) {
+                cg_expr(cg, node->data.array_lit.elements.items[i], slots);
+                switch (elem_size) {
+                    case 1:
+                        snprintf(buf, sizeof(buf), "mov byte [rsp+%d], al", offset);
+                        break;
+                    case 2:
+                        snprintf(buf, sizeof(buf), "mov word [rsp+%d], ax", offset);
+                        break;
+                    case 4:
+                        snprintf(buf, sizeof(buf), "mov dword [rsp+%d], eax", offset);
+                        break;
+                    default:
+                        snprintf(buf, sizeof(buf), "mov qword [rsp+%d], rax", offset);
+                        break;
+                }
+                cg_inst(cg, buf);
+                offset += elem_size;
+            }
+
+            /* Return array pointer in rax */
+            cg_inst1(cg, "mov", "rax, rsp");
             break;
         }
 
@@ -1398,6 +1536,33 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 }
                 case BIN_SUB: cg_inst1(cg, "sub",  "rax, rcx"); break;
                 case BIN_MUL: cg_inst1(cg, "mul",  "rcx"); break;
+                case BIN_POWER: {
+                    /* Power: rax = rax ** rcx (left = base, right = exponent) */
+                    int pow_start = cg_new_label(cg);
+                    int pow_done = cg_new_label(cg);
+                    cg_comment(cg, "power operator **");
+                    /* Save base (rax) and exponent (rcx) */
+                    cg_inst1(cg, "push", "rcx");   /* save exponent */
+                    cg_inst1(cg, "push", "rax");   /* save base */
+                    /* Load base into rcx for mul */
+                    cg_inst(cg, "mov rcx, [rsp]");
+                    /* Initialize result = 1 */
+                    cg_inst1(cg, "mov", "rax, 1");
+                    /* Load exponent into r8 (mul clobbers rdx) */
+                    cg_inst(cg, "mov r8, [rsp+8]");
+                    /* If exponent == 0, skip loop */
+                    cg_inst(cg, "test r8, r8");
+                    cg_write_fmt(cg, "    jz L_%x\n", pow_done);
+                    cg_write_fmt(cg, "L_%x:\n", pow_start);
+                    /* Multiply result by base (rcx) */
+                    cg_inst1(cg, "mul", "rcx");
+                    /* Decrement exponent */
+                    cg_inst1(cg, "dec", "r8");
+                    cg_write_fmt(cg, "    jnz L_%x\n", pow_start);
+                    cg_write_fmt(cg, "L_%x:\n", pow_done);
+                    cg_inst(cg, "add rsp, 16");  /* pop base and exponent */
+                    break;
+                }
                 case BIN_DIV: cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); break;
                 case BIN_MOD: cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); cg_inst1(cg, "mov", "rax, rdx"); break;
                 case BIN_EQ:  cg_inst1(cg, "cmp",  "rax, rcx"); cg_inst(cg, "sete al");  cg_inst(cg, "movzx rax, al"); break;
@@ -1410,8 +1575,8 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 case BIN_BIT_AND: cg_inst1(cg, "and", "rax, rcx"); break;
                 case BIN_BIT_OR:  cg_inst1(cg, "or",  "rax, rcx"); break;
                 case BIN_BIT_XOR: cg_inst1(cg, "xor", "rax, rcx"); break;
-                case BIN_SHL:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shl", "rax, cl"); break;
-                case BIN_SHR:     cg_inst1(cg, "xchg", "rax, rcx"); cg_inst1(cg, "shr", "rax, cl"); break;
+                case BIN_SHL:     cg_inst1(cg, "shl", "rax, cl"); break;
+                case BIN_SHR:     cg_inst1(cg, "shr", "rax, cl"); break;
                 /* Assignment: x = expr — store result to variable's stack slot */
                 case BIN_ASSIGN: {
                     cg_comment(cg, "assign");
@@ -1428,7 +1593,34 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     break;
                 }
                 /* Compound assignment: x += expr etc — left value in rax, right in rcx */
-                case BIN_ADD_ASSIGN: cg_comment(cg, "+="); cg_inst1(cg, "add", "rax, rcx"); goto store_assign;
+                case BIN_ADD_ASSIGN: {
+                    cg_comment(cg, "+=");
+                    bool left_is_str = false;
+                    if (node->data.binary.left && node->data.binary.left->type == NODE_IDENT &&
+                        node->data.binary.left->data.ident.resolved) {
+                        AstNode *ld = node->data.binary.left->data.ident.resolved;
+                        AstNode *lt = NULL;
+                        if (ld->type == NODE_LET) lt = ld->data.let_decl.type;
+                        else if (ld->type == NODE_PARAM) lt = ld->data.param.type;
+                        if (lt && lt->type == NODE_TYPE_PRIMITIVE && lt->data.type_node.prim == PRIM_STRING)
+                            left_is_str = true;
+                    }
+                    if (left_is_str) {
+                        /* Convert right operand to string if numeric */
+                        if (is_numeric_expr(node->data.binary.right)) {
+                            cg_inst1(cg, "mov", "rdi, rcx");
+                            cg_inst(cg, "call __aether_itoa");
+                            cg_inst1(cg, "mov", "rcx, rax");
+                        }
+                        cg_inst1(cg, "push", "rax");
+                        cg_inst1(cg, "push", "rcx");
+                        cg_inst(cg, "call __aether_concat");
+                        cg_inst(cg, "add rsp, 16");
+                    } else {
+                        cg_inst1(cg, "add", "rax, rcx");
+                    }
+                    goto store_assign;
+                }
                 case BIN_SUB_ASSIGN: cg_comment(cg, "-="); cg_inst1(cg, "sub", "rax, rcx"); goto store_assign;
                 case BIN_MUL_ASSIGN: cg_comment(cg, "*="); cg_inst1(cg, "mul", "rcx"); goto store_assign;
                 case BIN_DIV_ASSIGN: cg_comment(cg, "/="); cg_inst(cg, "xor rdx, rdx"); cg_inst1(cg, "div", "rcx"); goto store_assign;
@@ -1477,6 +1669,20 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     break;
                 }
                 case BIN_RANGE: cg_comment(cg, "range"); cg_inst1(cg, "mov", "rax, rcx"); break;
+                case BIN_OR_ELSE: {
+                    /* x or default: if x is none (0), use default */
+                    cg_comment(cg, "optional unwrap (or)");
+                    int lbl_has_val = cg_new_label(cg);
+                    char lbl[32];
+                    cg_inst1(cg, "test", "rax, rax");
+                    snprintf(lbl, sizeof(lbl), "jnz L_or_else_has_%d", lbl_has_val);
+                    cg_inst(cg, lbl);
+                    /* rax is 0 (none), use default (rcx) */
+                    cg_inst1(cg, "mov", "rax, rcx");
+                    snprintf(lbl, sizeof(lbl), "L_or_else_has_%d:", lbl_has_val);
+                    cg_write_fmt(cg, "%s\n", lbl);
+                    break;
+                }
                 case BIN_CONCAT: {
                     cg_comment(cg, "string concat");
                     /* rax = left, rcx = right */
@@ -1505,6 +1711,13 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         cg_inst1(cg, "pop", "rcx");      /* restore rcx = right (already a string) */
                     }
                     /* Now rax = left (string), rcx = right (string) */
+                    /* If either is neither string nor numeric (e.g. array pointer), null it */
+                    if (!is_string_expr(node->data.binary.left) && !left_num) {
+                        cg_inst(cg, "xor rax, rax");
+                    }
+                    if (!is_string_expr(node->data.binary.right) && !right_num) {
+                        cg_inst(cg, "xor rcx, rcx");
+                    }
                     cg_inst1(cg, "push", "rax");   /* left arg (rbp+24) */
                     cg_inst1(cg, "push", "rcx");   /* right arg (rbp+16) */
                     cg_inst(cg, "call __aether_concat");
@@ -1561,6 +1774,14 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                     /* rax now holds the heap pointer */
                     break;
                 }
+                case UNARY_ARRAY_LEN: {
+                    /* #expr — array length: read 8-byte length from array header */
+                    cg_comment(cg, "array length");
+                    /* expr is already in rax (the array pointer) */
+                    /* Array layout: [length: u64][data...] */
+                    cg_inst(cg, "mov rax, [rax]");
+                    break;
+                }
                 default: break;
             }
             break;
@@ -1568,7 +1789,7 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
 
         case NODE_CALL: {
             /* Check for built-in functions on host targets */
-            bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST);
+            bool is_host = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST || cg->target == TARGET_LIB);
             if (is_host && node->data.call.callee->type == NODE_IDENT) {
                 char fn_name[256];
                 int nlen = (int)node->data.call.callee->data.ident.name.len;
@@ -1576,17 +1797,14 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                 memcpy(fn_name, node->data.call.callee->data.ident.name.data, nlen);
                 fn_name[nlen] = '\0';
 
-                /* Built-in: print(string) — emit write syscall inline */
+                /* Built-in: print(string) — host: write syscall, freestanding: 0x5008 syscall page */
                 if (strcmp(fn_name, "print") == 0 && node->data.call.args.count >= 1) {
                     AstNode *arg = node->data.call.args.items[0];
                     cg_comment(cg, "print() built-in");
                     if (arg->type == NODE_LITERAL_STRING) {
                         const char *label = cg_emit_string(cg, arg->data.literal.string_val);
-
-                        /* Compute processed length */
                         char processed[8192];
                         int plen = process_string_literal(arg->data.literal.string_val, processed, sizeof(processed) - 1);
-
                         if (cg->target == TARGET_MACHO64) {
                             cg_inst1(cg, "mov", "rdi, 1");
                             cg_write_fmt(cg, "    lea rsi, [rel %s]\n", label);
@@ -1600,22 +1818,19 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                             cg_inst1(cg, "mov", "rax, 1");
                             cg_inst(cg, "syscall");
                         } else {
-                            /* Freestanding: print() is a no-op (kernel uses serial) */
-                            cg_comment(cg, "freestanding: print() is a no-op");
+                            /* Freestanding: call through kernel syscall page slot 1 (puts) */
+                            cg_inst(cg, "mov rax, [0x5008]");
+                            cg_inst(cg, "call rax");
                         }
                         cg_inst1(cg, "xor", "rax, rax");
                     } else {
-                        /* Runtime string: evaluate expression, then call write syscall with strlen */
                         cg_comment(cg, "print() runtime string");
                         cg_expr(cg, arg, slots);
-                        /* Auto-convert numeric to string for print() */
                         if (is_numeric_expr(arg)) {
                             cg_inst1(cg, "mov", "rdi, rax");
                             cg_inst(cg, "call __aether_itoa");
                         }
-                        /* rax = string pointer, save it */
                         cg_inst1(cg, "push", "rax");
-                        /* Compute strlen — handle null pointer */
                         int sl_id = cg->label_counter++;
                         cg_inst(cg, "xor rcx, rcx");
                         cg_inst(cg, "test rax, rax");
@@ -1627,7 +1842,6 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                         cg_write_fmt(cg, "    inc rcx\n");
                         cg_write_fmt(cg, "    jmp .strlen_loop_%d\n", sl_id);
                         cg_write_fmt(cg, ".strlen_done_%d:\n", sl_id);
-                        /* rcx = length, pop rsi = string pointer */
                         cg_inst1(cg, "pop", "rsi");
                         cg_inst1(cg, "mov", "rdx, rcx");
                         if (cg->target == TARGET_MACHO64) {
@@ -1639,7 +1853,8 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
                             cg_inst1(cg, "mov", "rax, 1");
                             cg_inst(cg, "syscall");
                         } else {
-                            cg_comment(cg, "freestanding: print() is a no-op");
+                            cg_inst(cg, "mov rax, [0x5008]");
+                            cg_inst(cg, "call rax");
                         }
                         cg_inst1(cg, "xor", "rax, rax");
                     }
@@ -1695,56 +1910,115 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             cg_comment(cg, "function call");
             int argc = node->data.call.args.count;
 
-            /* SysV AMD64 ABI: first 6 integer args in rdi, rsi, rdx, rcx, r8, r9
-               For ≤6 args (Phase 1): evaluate right-to-left, push all, pop into regs */
-            const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-            int reg_count = argc < 6 ? argc : 6;
-
-            /* Evaluate args right-to-left, push each onto stack */
-            for (int i = argc - 1; i >= 0; i--) {
-                cg_expr(cg, node->data.call.args.items[i], slots);
-                cg_inst1(cg, "push", "rax");
-            }
-
-            /* Pop into target registers rdi, rsi, rdx, rcx, r8, r9 */
-            for (int i = 0; i < reg_count; i++) {
-                cg_inst1(cg, "pop", regs[i]);
-            }
-
-            /* Extra stack args (>6) stay on stack — callee finds them at rsp+N */
-            /* After call, count of remaining items = argc - reg_count, but if that's ≤0 it's fine */
-            int stack_cleanup = argc > 6 ? argc - 6 : 0;
-
-            if (node->data.call.callee->type == NODE_IDENT) {
-                char buf[256];
-                snprintf(buf, sizeof(buf), "%.*s",
-                    (int)node->data.call.callee->data.ident.name.len,
-                    node->data.call.callee->data.ident.name.data);
-
-                /* Check if this is a sys func call — emit indirect call through 0x5000 table */
-                if (node->data.call.callee->data.ident.resolved &&
-                    node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL &&
-                    node->data.call.callee->data.ident.resolved->data.func.is_sys) {
-                    int idx = node->data.call.callee->data.ident.resolved->data.func.sys_index;
-                    if (idx >= 0) {
-                        cg_comment(cg, "syscall via 0x5000 table");
-                        char tmp[64];
-                        snprintf(tmp, sizeof(tmp), "mov rax, 0x%x", 0x5000 + idx * 8);
-                        cg_inst(cg, tmp);
-                        cg_inst(cg, "call [rax]");
-                    } else {
-                        cg_inst1(cg, "call", buf);
+            /* Check if callee has a variadic parameter */
+            bool callee_has_varargs = false;
+            int regular_param_count = argc;
+            if (node->data.call.callee->type == NODE_IDENT &&
+                node->data.call.callee->data.ident.resolved &&
+                node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL) {
+                AstNode *func_decl = node->data.call.callee->data.ident.resolved;
+                for (int i = 0; i < func_decl->data.func.params.count; i++) {
+                    if (func_decl->data.func.params.items[i]->data.param.is_varargs) {
+                        callee_has_varargs = true;
+                        regular_param_count = i;
+                        break;
                     }
-                } else {
-                    cg_inst1(cg, "call", buf);
                 }
             }
 
-            /* Clean up remaining stack args after call */
-            if (stack_cleanup > 0) {
-                char buf[32];
-                snprintf(buf, sizeof(buf), "add rsp, %d", stack_cleanup * 8);
-                cg_inst(cg, buf);
+            if (callee_has_varargs) {
+                int vararg_count = argc - regular_param_count;
+                cg_inst1(cg, "mov", "rdi, 8");
+                if (vararg_count > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "add rdi, %d", vararg_count * 8);
+                    cg_inst(cg, buf);
+                }
+                cg_inst(cg, "call __aether_alloc");
+                cg_inst1(cg, "mov", "r15, rax");
+                cg_inst1(cg, "mov", "rcx, 0");
+                if (vararg_count > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "mov rcx, %d", vararg_count);
+                    cg_inst(cg, buf);
+                }
+                cg_inst(cg, "mov [r15], rcx");
+                for (int i = argc - 1; i >= regular_param_count; i--) {
+                    cg_expr(cg, node->data.call.args.items[i], slots);
+                    cg_inst1(cg, "push", "rax");
+                }
+                for (int i = regular_param_count; i < argc; i++) {
+                    cg_inst1(cg, "pop", "rcx");
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "mov [r15+8+%d*8], rcx", i - regular_param_count);
+                    cg_inst(cg, buf);
+                }
+                /* Now push regular args right-to-left */
+                for (int i = regular_param_count - 1; i >= 0; i--) {
+                    cg_expr(cg, node->data.call.args.items[i], slots);
+                    cg_inst1(cg, "push", "rax");
+                }
+                int reg_count = regular_param_count < 6 ? regular_param_count : 6;
+                const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+                for (int i = 0; i < reg_count; i++) {
+                    cg_inst1(cg, "pop", regs[i]);
+                }
+                {
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "mov %s, r15", regs[regular_param_count < 6 ? regular_param_count : 5]);
+                    cg_inst(cg, buf);
+                }
+                int stack_cleanup = regular_param_count > 6 ? regular_param_count - 6 : 0;
+                if (node->data.call.callee->type == NODE_IDENT) {
+                    char buf[256];
+                    snprintf(buf, sizeof(buf), "%.*s",
+                        (int)node->data.call.callee->data.ident.name.len,
+                        node->data.call.callee->data.ident.name.data);
+                    cg_inst1(cg, "call", buf);
+                }
+                if (stack_cleanup > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "add rsp, %d", stack_cleanup * 8);
+                    cg_inst(cg, buf);
+                }
+            } else {
+                const char *regs[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+                int reg_count = argc < 6 ? argc : 6;
+                for (int i = argc - 1; i >= 0; i--) {
+                    cg_expr(cg, node->data.call.args.items[i], slots);
+                    cg_inst1(cg, "push", "rax");
+                }
+                for (int i = 0; i < reg_count; i++) {
+                    cg_inst1(cg, "pop", regs[i]);
+                }
+                int stack_cleanup = argc > 6 ? argc - 6 : 0;
+                if (node->data.call.callee->type == NODE_IDENT) {
+                    char buf[256];
+                    snprintf(buf, sizeof(buf), "%.*s",
+                        (int)node->data.call.callee->data.ident.name.len,
+                        node->data.call.callee->data.ident.name.data);
+                    if (node->data.call.callee->data.ident.resolved &&
+                        node->data.call.callee->data.ident.resolved->type == NODE_FUNC_DECL &&
+                        node->data.call.callee->data.ident.resolved->data.func.is_sys) {
+                        int idx = node->data.call.callee->data.ident.resolved->data.func.sys_index;
+                        if (idx >= 0) {
+                            cg_comment(cg, "syscall via 0x5000 table");
+                            char tmp[64];
+                            snprintf(tmp, sizeof(tmp), "mov rax, 0x%x", 0x5000 + idx * 8);
+                            cg_inst(cg, tmp);
+                            cg_inst(cg, "call [rax]");
+                        } else {
+                            cg_inst1(cg, "call", buf);
+                        }
+                    } else {
+                        cg_inst1(cg, "call", buf);
+                    }
+                }
+                if (stack_cleanup > 0) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "add rsp, %d", stack_cleanup * 8);
+                    cg_inst(cg, buf);
+                }
             }
             break;
         }
@@ -1764,6 +2038,74 @@ static void cg_expr(Codegen *cg, AstNode *node, VarSlot *slots) {
             /* Emit the lambda function body (will be placed in .text) */
             /* For now, just return 0 as placeholder — full lambda codegen deferred */
             cg_inst1(cg, "mov", "rax, 0");
+            break;
+        }
+
+        case NODE_MATCH: {
+            int end_label = cg_new_label(cg);
+            cg_comment(cg, "match expression");
+            cg_expr(cg, node->data.match_node.value, slots);
+            cg_inst1(cg, "push", "rax");  /* save matched value on stack */
+
+            for (int i = 0; i < node->data.match_node.arms.count; i++) {
+                AstNode *arm = node->data.match_node.arms.items[i];
+                int next_label = cg_new_label(cg);
+
+                /* Reload matched value */
+                cg_inst1(cg, "mov", "rax, [rsp]");
+
+                /* Check pattern against rax */
+                AstNode *pat = arm->data.match_arm.pattern;
+                bool is_wildcard = false;
+                if (pat->type == NODE_IDENT && sv_eq_cstr(pat->data.ident.name, "_")) {
+                    is_wildcard = true;
+                } else if (pat->type == NODE_LITERAL_INT) {
+                    char val_buf[32];
+                    snprintf(val_buf, sizeof(val_buf), "%llu", (unsigned long long)pat->data.literal.int_val);
+                    char tmp[64];
+                    snprintf(tmp, sizeof(tmp), "cmp rax, %s", val_buf);
+                    cg_inst(cg, tmp);
+                    cg_write_fmt(cg, "    jne L_%x\n", next_label);
+                } else if (pat->type == NODE_BINARY_OP &&
+                           (pat->data.binary.op == BIN_RANGE || pat->data.binary.op == BIN_RANGE_INCLUSIVE)) {
+                    /* Range pattern: case 1..9 or case 1..=9 */
+                    bool inclusive = (pat->data.binary.op == BIN_RANGE_INCLUSIVE);
+                    /* Compare rax with start */
+                    cg_expr(cg, pat->data.binary.left, slots);
+                    cg_inst1(cg, "push", "rax");  /* save start */
+                    cg_inst1(cg, "mov", "rax, [rsp+8]");  /* reload matched value */
+                    cg_inst1(cg, "pop", "rcx");   /* rcx = start */
+                    cg_inst1(cg, "cmp", "rax, rcx");
+                    cg_write_fmt(cg, "    jl L_%x\n", next_label);  /* if rax < start, skip */
+                    /* Compare rax with end */
+                    cg_expr(cg, pat->data.binary.right, slots);
+                    cg_inst1(cg, "mov", "rcx, rax");  /* rcx = end */
+                    cg_inst1(cg, "mov", "rax, [rsp]");  /* reload matched value */
+                    cg_inst1(cg, "cmp", "rax, rcx");
+                    if (inclusive) {
+                        cg_write_fmt(cg, "    jg L_%x\n", next_label);  /* if rax > end, skip */
+                    } else {
+                        cg_write_fmt(cg, "    jge L_%x\n", next_label);  /* if rax >= end, skip */
+                    }
+                }
+
+                if (!is_wildcard) {
+                    /* Emit arm body */
+                    if (arm->data.match_arm.body)
+                        cg_expr(cg, arm->data.match_arm.body, slots);
+                    cg_write_fmt(cg, "    jmp L_%x\n", end_label);
+                }
+
+                cg_write_fmt(cg, "L_%x:\n", next_label);
+                if (i == node->data.match_node.arms.count - 1) {
+                    /* Last arm (wildcard or default) */
+                    if (arm->data.match_arm.body)
+                        cg_expr(cg, arm->data.match_arm.body, slots);
+                }
+            }
+
+            cg_write_fmt(cg, "L_%x:\n", end_label);
+            cg_inst1(cg, "add", "rsp, 8");  /* pop matched value */
             break;
         }
 
@@ -1934,16 +2276,21 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_FOR: {
-            /* Basic: for var in start..end { body } */
+            /* Basic: for var in start..end { body }
+               Extended: for i, val in arr { body } */
             int start_label = cg_new_label(cg);
             int end_label = cg_new_label(cg);
 
+            /* Check if we have an index variable */
+            AstNode *index_var = node->data.for_node.index_var;
+
             /* If for has iterable, evaluate it */
             if (node->data.for_node.iterable) {
-                /* Range literal: we need separate start and end */
                 cg_comment(cg, "for loop");
                 /* Iterable is BIN_RANGE: left=start, right=end */
-                if (node->data.for_node.iterable->type == NODE_BINARY_OP) {
+                if (node->data.for_node.iterable->type == NODE_BINARY_OP &&
+                    (node->data.for_node.iterable->data.binary.op == BIN_RANGE ||
+                     node->data.for_node.iterable->data.binary.op == BIN_RANGE_INCLUSIVE)) {
                     AstNode *range = node->data.for_node.iterable;
                     /* Emit start value to rcx for loop counter */
                     cg_expr(cg, range->data.binary.left, slots);
@@ -1955,10 +2302,25 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_inst1(cg, "cmp", "rcx, rax");
                     cg_write_fmt(cg, "    jge L_%x\n", end_label);
 
+                    /* Store counter to index variable if present */
+                    if (index_var) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                index_var->data.ident.name.data,
+                                index_var->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rcx", off);
+                        cg_inst(cg, buf);
+                    }
+
                     /* If there's a loop variable, store counter to it */
                     if (node->data.for_node.var) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                node->data.for_node.var->data.ident.name.data,
+                                node->data.for_node.var->data.ident.name.len));
                         char buf[64];
-                        snprintf(buf, sizeof(buf), "mov [rbp-8], rcx"); /* placeholder */
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rcx", off);
                         cg_inst(cg, buf);
                     }
 
@@ -1970,6 +2332,61 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                     cg_inst1(cg, "inc", "rcx");
                     cg_write_fmt(cg, "    jmp L_%x\n", start_label);
                     cg_write_fmt(cg, "L_%x:\n", end_label);
+                } else {
+                    /* Array iteration: for i, val in arr { body }
+                       Evaluate iterable to get array pointer */
+                    cg_expr(cg, node->data.for_node.iterable, slots);
+                    cg_inst1(cg, "push", "rax");  /* save array pointer */
+
+                    /* Load array count from header */
+                    cg_inst(cg, "mov rax, [rsp]");
+                    cg_inst(cg, "mov rcx, [rax]");  /* rcx = count */
+                    cg_inst1(cg, "push", "rcx");     /* save count */
+
+                    /* Initialize index to 0 */
+                    cg_inst1(cg, "xor", "rcx, rcx");  /* rcx = index */
+
+                    cg_write_fmt(cg, "L_%x:\n", start_label);
+                    /* Compare index with count */
+                    cg_inst1(cg, "cmp", "rcx, [rsp]");
+                    cg_write_fmt(cg, "    jge L_%x\n", end_label);
+
+                    /* Store index to index_var if present */
+                    if (index_var) {
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                index_var->data.ident.name.data,
+                                index_var->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rcx", off);
+                        cg_inst(cg, buf);
+                    }
+
+                    /* Load element value: array_ptr + 8 + index * 8 */
+                    if (node->data.for_node.var) {
+                        cg_inst(cg, "mov rax, [rsp+8]");  /* array pointer */
+                        cg_inst(cg, "lea rax, [rax+rcx*8+8]");  /* element address */
+                        cg_inst(cg, "mov rax, [rax]");  /* load element value */
+                        int off = find_var_offset_by_name(slots,
+                            arena_strndup(cg->arena,
+                                node->data.for_node.var->data.ident.name.data,
+                                node->data.for_node.var->data.ident.name.len));
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "mov qword [rbp%+d], rax", off);
+                        cg_inst(cg, buf);
+                    }
+
+                    /* Body */
+                    cg_inst1(cg, "push", "rcx");  /* save loop counter */
+                    if (node->data.for_node.body)
+                        cg_stmt(cg, node->data.for_node.body, slots);
+                    cg_inst1(cg, "pop", "rcx");   /* restore loop counter */
+
+                    /* Increment index */
+                    cg_inst1(cg, "inc", "rcx");
+                    cg_write_fmt(cg, "    jmp L_%x\n", start_label);
+                    cg_write_fmt(cg, "L_%x:\n", end_label);
+                    cg_inst(cg, "add rsp, 16");  /* pop count and array pointer */
                 }
             }
             break;
@@ -2250,12 +2667,14 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
         }
 
         case NODE_UNSAFE: {
-            /* unsafe { body } — just emit the body, no special handling needed */
+            /* unsafe { body } — emit body with unsafe comment marker */
+            cg_comment(cg, "unsafe block begin");
             if (node->data.list.count > 0) {
                 for (int i = 0; i < node->data.list.count; i++) {
                     cg_stmt(cg, node->data.list.items[i], slots);
                 }
             }
+            cg_comment(cg, "unsafe block end");
             break;
         }
 
@@ -2265,7 +2684,7 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                 StringView asm_text = node->data.asm_block.text->data.literal.string_val;
                 if (asm_text.len > 0) {
                     cg_write(cg, "; begin asm block\n");
-                    /* Write each line directly, skipping extern declarations */
+                    /* Write each line, substituting [varName] with [rbp+offset] */
                     const char *p = asm_text.data;
                     const char *end = p + asm_text.len;
                     while (p < end) {
@@ -2278,13 +2697,48 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                             if ((p - s) >= 6 && strncmp(s, "extern", 6) == 0) {
                                 /* skip — already emitted at top */
                             } else {
-                                /* Strip Aether comments (#) from asm block output */
+                                /* Strip Aether comments (//) from asm block output */
                                 const char *s_trim = line_start;
                                 while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
-                                if (s_trim < p && *s_trim == '#') {
+                                if (s_trim + 1 < p && s_trim[0] == '/' && s_trim[1] == '/') {
                                     /* Skip this line entirely — it's an Aether comment */
                                 } else {
-                                    cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
+                                    /* Process line: substitute [varName] with [rbp+offset] */
+                                    char line_buf[1024];
+                                    int buf_pos = 0;
+                                    const char *cp = line_start;
+                                    while (cp < p && buf_pos < (int)sizeof(line_buf) - 8) {
+                                        if (*cp == '[') {
+                                            /* Look for matching ']' */
+                                            const char *rb = cp + 1;
+                                            while (rb < p && *rb != ']' && *rb != ' ' && *rb != '\t' && *rb != '\n') rb++;
+                                            if (rb < p && *rb == ']') {
+                                                size_t vlen = rb - (cp + 1);
+                                                if (vlen > 0 && vlen < 256) {
+                                                    char vname[256];
+                                                    memcpy(vname, cp + 1, vlen);
+                                                    vname[vlen] = '\0';
+                                                    /* Check if this name matches a known variable slot */
+                                                    VarSlot *vs = slots;
+                                                    bool found = false;
+                                                    while (vs) {
+                                                        if (strcmp(vs->name, vname) == 0) {
+                                                            int n = snprintf(line_buf + buf_pos, sizeof(line_buf) - buf_pos, "[rbp%+d]", vs->stack_offset);
+                                                            if (n > 0) buf_pos += n;
+                                                            cp = rb + 1;
+                                                            found = true;
+                                                            break;
+                                                        }
+                                                        vs = vs->next;
+                                                    }
+                                                    if (found) continue;
+                                                }
+                                            }
+                                        }
+                                        line_buf[buf_pos++] = *cp++;
+                                    }
+                                    line_buf[buf_pos] = '\0';
+                                    cg_write_fmt(cg, "%s\n", line_buf);
                                 }
                             }
                         } else {
@@ -2293,6 +2747,23 @@ static void cg_stmt(Codegen *cg, AstNode *node, VarSlot *slots) {
                         if (p < end) p++;
                     }
                     cg_write(cg, "; end asm block\n");
+
+                    /* After asm block, store outputs from registers back to stack */
+                    if (node->data.asm_block.outputs.count > 0) {
+                        const char *regs[] = {"rax", "rdx"};
+                        for (int i = 0; i < node->data.asm_block.outputs.count && i < 2; i++) {
+                            AstNode *out_var = node->data.asm_block.outputs.items[i];
+                            StringView oname = out_var->data.ident.name;
+                            /* Null-terminate for lookup */
+                            char vname[256];
+                            int vlen = oname.len < 255 ? (int)oname.len : 255;
+                            memcpy(vname, oname.data, vlen);
+                            vname[vlen] = '\0';
+                            int offset = find_var_offset_by_name(slots, vname);
+                            cg_indent(cg);
+                            cg_write_fmt(cg, "mov [rbp%+d], %s\n", offset, regs[i]);
+                        }
+                    }
                 }
             }
             break;
@@ -2448,7 +2919,17 @@ static void cg_func(Codegen *cg, AstNode *func) {
     }
     if (!body_has_return) {
         cg_comment(cg, "default return");
-        if (func->data.func.return_type) {
+        /* Check if body is/was an asm block — if so, asm already set rax */
+        int body_is_asm = 0;
+        if (func->data.func.body && func->data.func.body->type == NODE_ASM_BLOCK) {
+            body_is_asm = 1;
+        } else if (func->data.func.body && func->data.func.body->type == NODE_BLOCK) {
+            AstNodeList *stmts = &func->data.func.body->data.list;
+            if (stmts->count > 0 && stmts->items[stmts->count - 1]->type == NODE_ASM_BLOCK) {
+                body_is_asm = 1;
+            }
+        }
+        if (!body_is_asm && func->data.func.return_type) {
             cg_inst(cg, "xor rax, rax");  /* default return value = 0 */
         }
         if (func->data.func.is_throws) {
@@ -2653,106 +3134,28 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     if (test_func_count > 0 && !has_main && !cg->has_layout) {
         has_test_harness = true;
         cg_comment(cg, "Auto-generated test dispatcher (no main() found, @test functions present)");
-        cg_comment(cg, "Usage: ./binary <test_func_name>  — calls the named @test function, returns its exit code");
-
-        /* Emit test name strings in .rodata */
-        cg_write(cg, "section .rodata\n");
-        for (int i = 0; i < program->data.list.count; i++) {
-            AstNode *node = program->data.list.items[i];
-            if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
-            const char *fname = arena_strndup(cg->arena,
-                node->data.func.name->data.ident.name.data,
-                node->data.func.name->data.ident.name.len);
-            cg_write_fmt(cg, "L_test_name_%d: db \"%s\", 0\n", i, fname);
-        }
-        cg_write(cg, "\n");
+        cg_comment(cg, "Calls all @test functions, returns __test_failures count");
 
         /* Emit main dispatcher in .text */
         cg_write(cg, "section .text\n\n");
 
-        /* main: rdi = inputString (argv[1]), rsi = strlen */
+        /* main: call all @test functions */
         cg_write(cg, "main:\n");
         cg_inst1(cg, "push", "rbp");
         cg_inst1(cg, "mov", "rbp, rsp");
 
-        /* If no argument (rdi=0), return -1 */
-        cg_inst(cg, "test rdi, rdi");
-        cg_inst(cg, "jz L_test_no_arg");
-
-        /* Save inputString ptr in r12 (callee-saved) */
-        cg_inst1(cg, "mov", "r12, rdi");
-
-        /* Try each @test function name */
-        int test_idx = 0;
         for (int i = 0; i < program->data.list.count; i++) {
             AstNode *node = program->data.list.items[i];
             if (node->type != NODE_FUNC_DECL || !node->data.func.has_test) continue;
-
             const char *fname = arena_strndup(cg->arena,
                 node->data.func.name->data.ident.name.data,
                 node->data.func.name->data.ident.name.len);
-
-            cg_write_fmt(cg, "; Try: %s\n", fname);
-            cg_inst1(cg, "mov", "rsi, r12");        /* rsi = inputString */
-            cg_write_fmt(cg, "    lea rdi, [rel L_test_name_%d]\n", i);  /* rdi = test name */
-            cg_inst(cg, "call L_test_strcmp");
-            cg_inst(cg, "test rax, rax");
-            int lbl = cg_new_label(cg);
-            char jz_buf[32];
-            snprintf(jz_buf, sizeof(jz_buf), "jnz L_test_call_%d", lbl);
-            cg_inst(cg, jz_buf);
-            /* Not a match — try next */
-            char next_buf[32];
-            snprintf(next_buf, sizeof(next_buf), "jmp L_test_next_%d", lbl);
-            cg_inst(cg, next_buf);
-            /* Match — call the function with default args (0, 0) */
-            snprintf(jz_buf, sizeof(jz_buf), "L_test_call_%d:", lbl);
-            cg_write_fmt(cg, "%s\n", jz_buf);
-            cg_inst(cg, "xor rdi, rdi");
-            cg_inst(cg, "xor rsi, rsi");
             cg_write_fmt(cg, "    call %s\n", fname);
-            cg_write(cg, "    leave\n");
-            cg_write(cg, "    ret\n");
-            snprintf(jz_buf, sizeof(jz_buf), "L_test_next_%d:", lbl);
-            cg_write_fmt(cg, "%s\n", jz_buf);
-            test_idx++;
         }
 
-        /* No match found — return -1 */
-        cg_comment(cg, "no matching @test function found");
-        cg_inst(cg, "mov rax, -1");
+        /* Return __test_failures */
+        cg_inst(cg, "mov rax, [__test_failures]");
         cg_write(cg, "    leave\n");
-        cg_write(cg, "    ret\n");
-
-        /* No argument — return -1 */
-        cg_write(cg, "L_test_no_arg:\n");
-        cg_inst(cg, "mov rax, -1");
-        cg_write(cg, "    leave\n");
-        cg_write(cg, "    ret\n\n");
-
-        /* Simple strcmp: rdi=a, rsi=b, returns 1 if equal, 0 if not */
-        cg_write(cg, "L_test_strcmp:\n");
-        cg_inst1(cg, "push", "rbx");
-        cg_inst1(cg, "mov", "rbx, rdi");
-        cg_write(cg, "L_strcmp_loop:\n");
-        cg_inst(cg, "mov al, [rbx]");
-        cg_inst(cg, "mov dl, [rsi]");
-        cg_inst(cg, "test al, al");
-        cg_inst(cg, "jz L_strcmp_end_a");
-        cg_inst(cg, "cmp al, dl");
-        cg_inst(cg, "jne L_strcmp_neq");
-        cg_inst(cg, "inc rbx");
-        cg_inst(cg, "inc rsi");
-        cg_inst(cg, "jmp L_strcmp_loop");
-        cg_write(cg, "L_strcmp_end_a:\n");
-        cg_inst(cg, "test dl, dl");
-        cg_inst(cg, "jnz L_strcmp_neq");
-        cg_inst(cg, "mov rax, 1");
-        cg_inst(cg, "jmp L_strcmp_done");
-        cg_write(cg, "L_strcmp_neq:\n");
-        cg_inst(cg, "xor rax, rax");
-        cg_write(cg, "L_strcmp_done:\n");
-        cg_inst1(cg, "pop", "rbx");
         cg_write(cg, "    ret\n\n");
     }
 
@@ -2841,10 +3244,10 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                         const char *line_start = p;
                         while (p < end && *p != '\n') p++;
                         if (p > line_start) {
-                            /* Strip Aether comments (#) from asm block output */
+                            /* Strip Aether comments (//) from asm block output */
                             const char *s_trim = line_start;
                             while (s_trim < p && (*s_trim == ' ' || *s_trim == '\t')) s_trim++;
-                            if (s_trim < p && *s_trim == '#') {
+                            if (s_trim + 1 < p && s_trim[0] == '/' && s_trim[1] == '/') {
                                 /* Skip this line entirely — it's an Aether comment */
                             } else {
                                 cg_write_fmt(cg, "%.*s\n", (int)(p - line_start), line_start);
@@ -2877,8 +3280,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
     }
 
     /* Entry point — skip for @layout (flat binaries define their own entry) */
-    /* Also skip for .aelib libraries (no entry point needed) */
-    if (!cg->has_layout && cg->target != TARGET_LIB) {
+    /* Also skip for .aelib libraries and modules (no entry point needed) */
+    if (!cg->has_layout && cg->target != TARGET_LIB && cg->target != TARGET_MODULE) {
         if (cg->entry_func) {
             /* @entry(addr) is set — function IS the entry point directly */
             cg_write_fmt(cg, "; Entry point: %s at 0x%lx\n", cg->entry_func, (unsigned long)cg->entry_addr);
@@ -2970,6 +3373,8 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             } else if (cg->target == TARGET_BINARY) {
                 cg_comment(cg, "Aether OS binary: ret to shell after main returns");
                 cg_inst(cg, "ret");
+            } else if (cg->target == TARGET_MODULE) {
+                cg_comment(cg, "module: no entry wrapper needed — kernel calls mod_init directly");
             } else {
                 cg_comment(cg, "freestanding: just hlt after main returns");
                 cg_inst(cg, "hlt");
@@ -2981,7 +3386,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
 
     /* Emit runtime helpers and data sections — BEFORE user functions */
     if (!cg->has_layout) {
-        bool needs_runtime = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST || cg->target == TARGET_BINARY);
+        bool needs_runtime = (cg->target == TARGET_MACHO64 || cg->target == TARGET_ELF64_HOST || cg->target == TARGET_BINARY || cg->target == TARGET_LIB);
         if (needs_runtime) {
             /* Bump allocator state in .bss */
             cg_write(cg, "section .bss\n");
@@ -3244,7 +3649,7 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
             cg_inst1(cg, "mov", "rdi, r13");         /* dest = buffer start */
             cg_inst1(cg, "mov", "rsi, r14");         /* src = first digit */
             /* Compute length */
-            cg_inst1(cg, "lea", "rdx, [r13+19]");
+            cg_inst1(cg, "lea", "rdx, [r13+20]");
             cg_inst1(cg, "sub", "rdx, r14");         /* rdx = length */
             cg_inst(cg, "call LA_concat_memcpy");
             cg_inst(cg, "mov byte [r13+rdx], 0");    /* null terminate at new position */
@@ -3321,12 +3726,11 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
         cg_write(cg, "\n");
     }
 
-    /* Emit string table — uses the label stored in each StringEntry */
-    if (!cg->has_layout) {
+    /* Emit string table at the end — all string literals are collected during codegen */
+    if (string_entries) {
         cg_write(cg, "section .rodata\n");
         for (StringEntry *e = string_entries; e; e = e->next) {
             cg_write_fmt(cg, "Lstr%d: db ", e->label_num);
-            /* Emit printable chars between quotes, non-printable as numeric */
             cg_write(cg, "\"");
             for (size_t i = 0; i < e->sv.len; i++) {
                 unsigned char c = (unsigned char)e->sv.data[i];
@@ -3334,7 +3738,6 @@ const char *codegen_generate(Codegen *cg, AstNode *program) {
                 else if (c == '\\') cg_write(cg, "\\\\");
                 else if (c >= 32 && c < 127) { char buf[2] = {c, 0}; cg_write(cg, buf); }
                 else {
-                    /* Non-printable: close string, emit as numeric, reopen */
                     cg_write_fmt(cg, "\", %u, \"", c);
                 }
             }
@@ -3479,47 +3882,45 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return ret;
     }
 
-    /* .aelib library target: assemble to .o, extract metadata, write .aelib */
+    /* .aelib library target: assemble to .o for archiving */
     if (cg->target == TARGET_LIB) {
-        /* Determine host-appropriate NASM format */
-        Target host_target = codegen_detect_host();
-        const char *nasm_fmt = (host_target == TARGET_MACHO64) ? "macho64" : "elf64";
-
-        /* Assemble .asm → .o via NASM */
-        char obj_file[1024];
-        snprintf(obj_file, sizeof(obj_file), "/tmp/kernel/aether_lib.o");
+        /* Always use ELF64 for .aelib — the object code is used across toolchains */
+        const char *nasm_fmt = "elf64";
 
         char cmd[2048];
-        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o %s %s", nasm_fmt, obj_file, asm_file);
+        snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o \"%s\" \"%s\"", nasm_fmt, output_file, asm_file);
         int ret = system(cmd);
         if (ret != 0) {
             fprintf(stderr, "nasm failed (exit %d)\n", ret);
             return ret;
         }
 
-        /* Read the .o file */
-        FILE *f = fopen(obj_file, "rb");
-        if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", obj_file); return 1; }
-        fseek(f, 0, SEEK_END);
-        long flen = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        uint8_t *code_data = (uint8_t *)malloc((size_t)flen);
-        if (!code_data) { fclose(f); return 1; }
-        size_t rlen = fread(code_data, 1, (size_t)flen, f);
-        fclose(f);
+        /* Also build the .aelib archive from the .o */
+        {
+            /* Read the .o file */
+            FILE *f = fopen(output_file, "rb");
+            if (!f) { fprintf(stderr, "Error: cannot read '%s'\n", output_file); return 1; }
+            fseek(f, 0, SEEK_END);
+            long flen = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            uint8_t *code_data = (uint8_t *)malloc((size_t)flen);
+            if (!code_data) { fclose(f); return 1; }
+            size_t rlen = fread(code_data, 1, (size_t)flen, f);
+            fclose(f);
 
-        /* Set code data on the aelib writer */
-        aelib_set_code(cg->aelib_writer, code_data, rlen);
+            /* Set code data on the aelib writer */
+            aelib_set_code(cg->aelib_writer, code_data, rlen);
 
-        /* Write the .aelib file */
-        ret = aelib_write(cg->aelib_writer, output_file);
-        if (ret != 0) {
-            fprintf(stderr, "aelib_write failed\n");
-            remove(obj_file);
-            return ret;
+            /* Write the .aelib file alongside the .o */
+            char aelib_path[1024];
+            snprintf(aelib_path, sizeof(aelib_path), "%s.aelib", output_file);
+            ret = aelib_write(cg->aelib_writer, aelib_path);
+            if (ret != 0) {
+                fprintf(stderr, "aelib_write failed\n");
+                return ret;
+            }
         }
 
-        remove(obj_file);
         return 0;
     }
 
@@ -3698,7 +4099,7 @@ int codegen_assemble(Codegen *cg, const char *asm_file, const char *output_file)
         return 0;
     }
 
-    snprintf(cmd, sizeof(cmd), "nasm -O0 -Wno-label-redef-late -f %s -o %s %s", nasm_format, obj_file, asm_file);
+    snprintf(cmd, sizeof(cmd), "nasm -O2 -Wno-label-redef-late -f %s -o %s %s", nasm_format, obj_file, asm_file);
     int ret = system(cmd);
     if (ret != 0) {
         fprintf(stderr, "nasm failed (exit %d)\n", ret);

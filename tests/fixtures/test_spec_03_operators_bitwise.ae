@@ -1,0 +1,46 @@
+// test_spec_03_operators_bitwise.ae — Section 3.4: Bitwise Operators
+// Tests: &, |, ^, ~, <<, >>
+
+import "std/test"
+
+@test
+func main(): void {
+    let a: u64 = 0b1010  // 10
+    let b: u64 = 0b1100  // 12
+
+    // Bitwise AND
+    let band: u64 = a & b   // 0b1000 = 8
+
+    // Bitwise OR
+    let bor: u64 = a | b    // 0b1110 = 14
+
+    // Bitwise XOR
+    let bxor: u64 = a ^ b   // 0b0110 = 6
+
+    // Bitwise NOT
+    let bnot: u64 = ~a      // all bits flipped
+
+    // Left shift
+    let shl: u64 = a << 2   // 0b101000 = 40
+
+    // Right shift
+    let shr: u64 = 0b101000 >> 2  // 0b1010 = 10
+
+    // Shift by zero
+    let shl_zero: u64 = a << 0   // 10
+    let shr_zero: u64 = a >> 0   // 10
+
+    // Compound bitwise expression
+    let expr: u64 = (a & b) | (a ^ b)  // 8 | 6 = 14
+
+    // Verify with assertions
+    assertEquals(8, band, "0b1010 & 0b1100 should be 8")
+    assertEquals(14, bor, "0b1010 | 0b1100 should be 14")
+    assertEquals(6, bxor, "0b1010 ^ 0b1100 should be 6")
+    assertEquals(40, shl, "0b1010 << 2 should be 40")
+    assertEquals(10, shr, "0b101000 >> 2 should be 10")
+    assertEquals(10, shl_zero, "a << 0 should be 10")
+    assertEquals(10, shr_zero, "a >> 0 should be 10")
+    assertEquals(14, expr, "(a & b) | (a ^ b) should be 14")
+    assertEquals(bnot, ~a, "~a should equal ~a")
+}
