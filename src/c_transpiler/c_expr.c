@@ -774,6 +774,15 @@ void c_emit_expr(CCodegen *cg, AstNode *node) {
         case NODE_CALL:           c_emit_call(cg, node); break;
         case NODE_INDEX:          c_emit_index(cg, node); break;
         case NODE_FIELD_ACCESS:   c_emit_field_access(cg, node); break;
+        case NODE_CAST: {
+            /* Cast: (target_type)expr */
+            fputs("((", cg->out);
+            c_emit_type(cg, node->data.binary.right);
+            fputs(")(", cg->out);
+            c_emit_expr(cg, node->data.binary.left);
+            fputs("))", cg->out);
+            break;
+        }
         case NODE_MATCH: {
             /* Match expression: emit as ternary chain.
              * match val { case p1 -> e1; case p2 -> e2; case _ -> e3 }

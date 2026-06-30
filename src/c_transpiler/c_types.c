@@ -16,6 +16,7 @@ const char *c_prim_type_name(PrimType prim) {
         case PRIM_U16:    return "uint16_t";
         case PRIM_U32:    return "uint32_t";
         case PRIM_U64:    return "uint64_t";
+        case PRIM_U128:   return "unsigned __int128";
         case PRIM_I8:     return "int8_t";
         case PRIM_I16:    return "int16_t";
         case PRIM_I32:    return "int32_t";
