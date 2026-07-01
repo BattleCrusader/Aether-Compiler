@@ -1173,26 +1173,36 @@ t.fahrenheit = 32    // calls setter → celsius = 0
 
 Operators can be overloaded by defining a function named `op_` followed by the operator symbol. The `op_` prefix is reserved — it can only be used for operator overloading. The symbol can be any sequence of characters (including unicode), making custom operators possible.
 
+Operator overloads use explicit left/right parameters (C++ style):
+
 ```aether
 struct Vector2 {
     x: f64
     y: f64
 }
 
-impl Vector2 {
-    func op_+(self, other: Vector2): Vector2 {
-        return Vector2 { x: self.x + other.x, y: self.y + other.y }
-    }
-
-    func op_*(self, scalar: f64): Vector2 {
-        return Vector2 { x: self.x * scalar, y: self.y * scalar }
-    }
+func op_+(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    return result
 }
 
-let a = Vector2 { x: 1, y: 2 }
-let b = Vector2 { x: 3, y: 4 }
-let c = a + b          // calls op_+
-let d = a * 2.0        // calls op_*
+func op_*(a: Vector2, scalar: f64): Vector2 {
+    let result: Vector2
+    result.x = a.x * scalar
+    result.y = a.y * scalar
+    return result
+}
+
+let a: Vector2
+a.x = 1
+a.y = 2
+let b: Vector2
+b.x = 3
+b.y = 4
+let c: Vector2 = a + b  // calls op_+(a, b)
+let d: Vector2 = a * 2.0  // calls op_*(a, 2.0)
 ```
 
 **Supported operator overloads:**
