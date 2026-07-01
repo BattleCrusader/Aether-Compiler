@@ -1,0 +1,27 @@
+import "std/test"
+
+// Generic function with type constraint: T: Comparable
+// The constraint is parsed and stored in the AST but not enforced at runtime
+// (compile-time only check)
+
+func min<T: u64>(a: T, b: T): T {
+    if a < b { return a }
+    return b
+}
+
+@test
+func test_constrained_generic_compiles() {
+    assertTrue(1, "constrained generic function compiles")
+}
+
+@test
+func test_min_with_u64() {
+    let r = min(10, 20)
+    assertTrue(r == 10, "min(10, 20) == 10")
+}
+
+@test
+func test_min_reverse() {
+    let r = min(30, 5)
+    assertTrue(r == 5, "min(30, 5) == 5")
+}
