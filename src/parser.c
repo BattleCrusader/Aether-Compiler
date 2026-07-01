@@ -208,6 +208,37 @@ void parse_declaration(Parser *p, AstNodeList *decls) {
             }
             node_list_append(decls, func);
         }
+    } else if (parser_match(p, TOKEN_KW_PROP)) {
+        /* Top-level property declaration: prop name(params): type { body } */
+        if (!parser_check(p, TOKEN_IDENT)) {
+            parser_error(p, p->current, "expected property name");
+            return;
+        }
+        Token prop_name_tok = p->current; parser_advance(p);
+        AstNode *prop = node_func_decl(p->arena, prop_name_tok.loc,
+            node_ident(p->arena, prop_name_tok.loc, prop_name_tok.text),
+            false, false);
+        prop->type = NODE_PROPERTY;
+        prop->data.func.access = access;
+        prop->data.func.is_pub = is_pub;
+
+        /* Parameters: (params) */
+        if (parser_match(p, TOKEN_LPAREN)) {
+            prop->data.func.params = parse_params(p);
+            parser_expect(p, TOKEN_RPAREN, "property parameter list");
+        }
+
+        /* Optional return type: `: type` (getter if present, setter if absent) */
+        if (parser_match(p, TOKEN_COLON)) {
+            prop->data.func.return_type = parse_type(p);
+        }
+
+        /* Body */
+        if (parser_match(p, TOKEN_LBRACE)) {
+            prop->data.func.body = parse_block_braced(p);
+        }
+
+        node_list_append(decls, prop);
     } else if (parser_match(p, TOKEN_KW_SYS)) {
         /* sys func name() at(N) — syscall page declaration */
         if (parser_match(p, TOKEN_KW_FUNC)) {
@@ -711,9 +742,11 @@ AstNode *parse_struct_decl(Parser *p) {
                     /* Auto-inject 'self' as the first parameter for methods.
                      * The user writes: func fahrenheit(): f64 { return self.celsius * ... }
                      * The parser adds: self: ref StructName as the first param. */
+                    AstNode *self_type = node_create(p->arena, NODE_TYPE_REF, name_tok.loc);
+                    self_type->data.type_node.elem_type = node_type_named(p->arena, name_tok.loc, name_tok.text);
                     AstNode *self_param = node_param(p->arena, method->loc,
                         node_ident(p->arena, method->loc, SV("self")),
-                        NULL, false, false);
+                        self_type, false, false);
                     /* Prepend self to the param list */
                     AstNodeList new_params = {0};
                     node_list_append(&new_params, self_param);
@@ -722,6 +755,53 @@ AstNode *parse_struct_decl(Parser *p) {
                     method->data.func.params = new_params;
                     node_list_append(&st->data.struct_decl.methods, method);
                 }
+                continue;
+            }
+
+            /* Check if this is a property declaration: prop name(...) { body } */
+            if (parser_check(p, TOKEN_KW_PROP)) {
+                parser_advance(p);
+                if (!parser_check(p, TOKEN_IDENT)) {
+                    parser_error(p, p->current, "expected property name");
+                    break;
+                }
+                Token prop_name_tok = p->current; parser_advance(p);
+                AstNode *prop = node_func_decl(p->arena, prop_name_tok.loc,
+                    node_ident(p->arena, prop_name_tok.loc, prop_name_tok.text),
+                    false, false);
+                prop->type = NODE_PROPERTY;
+
+                /* Parameters: (params) */
+                if (parser_match(p, TOKEN_LPAREN)) {
+                    prop->data.func.params = parse_params(p);
+                    parser_expect(p, TOKEN_RPAREN, "property parameter list");
+                }
+
+                /* Optional return type: `: type` (getter if present, setter if absent) */
+                if (parser_match(p, TOKEN_COLON)) {
+                    prop->data.func.return_type = parse_type(p);
+                }
+
+                /* Body */
+                if (parser_match(p, TOKEN_LBRACE)) {
+                    prop->data.func.body = parse_block_braced(p);
+                }
+
+                /* Auto-inject 'self' as the first parameter */
+                {
+                    AstNode *self_type = node_create(p->arena, NODE_TYPE_REF, name_tok.loc);
+                    self_type->data.type_node.elem_type = node_type_named(p->arena, name_tok.loc, name_tok.text);
+                    AstNode *self_param = node_param(p->arena, prop->loc,
+                        node_ident(p->arena, prop->loc, SV("self")),
+                        self_type, false, false);
+                    AstNodeList new_params = {0};
+                    node_list_append(&new_params, self_param);
+                    for (int pi = 0; pi < prop->data.func.params.count; pi++)
+                        node_list_append(&new_params, prop->data.func.params.items[pi]);
+                    prop->data.func.params = new_params;
+                }
+
+                node_list_append(&st->data.struct_decl.methods, prop);
                 continue;
             }
 

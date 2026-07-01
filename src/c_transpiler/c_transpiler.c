@@ -83,7 +83,7 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Pass 1: Emit function prototypes (forward declarations) */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
-        if (decl->type == NODE_FUNC_DECL) {
+        if (decl->type == NODE_FUNC_DECL || decl->type == NODE_PROPERTY) {
             c_emit_func_prototype(cg, decl);
         }
     }
@@ -108,7 +108,7 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Pass 2b: Emit function bodies */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
-        if (decl->type == NODE_FUNC_DECL) {
+        if (decl->type == NODE_FUNC_DECL || decl->type == NODE_PROPERTY) {
             c_emit_func_decl(cg, decl);
         }
     }
