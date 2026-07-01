@@ -22,8 +22,16 @@ static AstNode *monomorphize_type(Arena *arena, AstNode *type_node,
             /* Check if this named type matches a generic param */
             for (int i = 0; i < type_params->count; i++) {
                 AstNode *tp = type_params->items[i];
-                if (tp->type == NODE_IDENT && type_node->data.type_node.name.len == tp->data.ident.name.len &&
-                    memcmp(type_node->data.type_node.name.data, tp->data.ident.name.data, type_node->data.type_node.name.len) == 0) {
+                StringView tp_name;
+                if (tp->type == NODE_TYPE_PARAM) {
+                    tp_name = tp->data.type_param.name->data.ident.name;
+                } else if (tp->type == NODE_IDENT) {
+                    tp_name = tp->data.ident.name;
+                } else {
+                    continue;
+                }
+                if (type_node->data.type_node.name.len == tp_name.len &&
+                    memcmp(type_node->data.type_node.name.data, tp_name.data, type_node->data.type_node.name.len) == 0) {
                     /* Substitute with concrete type */
                     if (i < concrete_types->count) {
                         return monomorphize_type(arena, concrete_types->items[i], type_params, concrete_types);

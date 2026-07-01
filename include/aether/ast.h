@@ -500,6 +500,7 @@ struct AstNode {
         CatchArm catch_arm;
         AttrData attr;
         AstNodeList list;   /* generic list for blocks */
+        TypeParam type_param;
     } data;
 };
 
