@@ -1219,18 +1219,15 @@ let d = a * 2.0        // calls op_*
 | `!` (unary) | `op_!` | Unary |
 | `~` (unary) | `op_~` | Unary |
 
-**Custom operators:** Any unicode symbol can be used as a custom operator:
+**Custom operators:** Any unicode symbol can be used as a custom operator with infix syntax:
 
 ```aether
 func op_⌛(a: int, b: int): int {
     return a + b
 }
 
-let result = op_⌛(1, 2)  // direct call
-// Future: let result = 1 ⌛ 2  // infix syntax
+let result = 1 ⌛ 2  // calls op_⌛(1, 2)
 ```
-
-> **Note:** Custom operators beyond the standard set require explicit function calls for now. Infix syntax for arbitrary unicode operators is planned.
 
 ---
 
