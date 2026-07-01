@@ -83,8 +83,14 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Pass 1: Emit function prototypes (forward declarations) */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
-        if (decl->type == NODE_FUNC_DECL || decl->type == NODE_PROPERTY) {
+        if (decl->type == NODE_FUNC_DECL) {
             c_emit_func_prototype(cg, decl);
+        }
+        /* Also emit prototypes for struct/class methods */
+        if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
+            for (int mi = 0; mi < decl->data.struct_decl.methods.count; mi++) {
+                c_emit_func_prototype(cg, decl->data.struct_decl.methods.items[mi]);
+            }
         }
     }
 
@@ -108,8 +114,14 @@ bool c_generate(CCodegen *cg, AstNode *program, FILE *out) {
     /* Pass 2b: Emit function bodies */
     for (int i = 0; i < program->data.list.count; i++) {
         AstNode *decl = program->data.list.items[i];
-        if (decl->type == NODE_FUNC_DECL || decl->type == NODE_PROPERTY) {
+        if (decl->type == NODE_FUNC_DECL) {
             c_emit_func_decl(cg, decl);
+        }
+        /* Also emit struct/class method bodies */
+        if (decl->type == NODE_STRUCT_DECL || decl->type == NODE_CLASS_DECL) {
+            for (int mi = 0; mi < decl->data.struct_decl.methods.count; mi++) {
+                c_emit_func_decl(cg, decl->data.struct_decl.methods.items[mi]);
+            }
         }
     }
 

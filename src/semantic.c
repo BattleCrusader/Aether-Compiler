@@ -415,6 +415,12 @@ void semantic_visit_node(SemanticAnalyzer *sa, AstNode *node) {
                     name_node->data.ident.name.len);
                 scope_declare(sa, tname, node);
             }
+            /* Visit struct/class methods */
+            if (node->type == NODE_STRUCT_DECL || node->type == NODE_CLASS_DECL) {
+                for (int mi = 0; mi < node->data.struct_decl.methods.count; mi++) {
+                    semantic_visit_node(sa, node->data.struct_decl.methods.items[mi]);
+                }
+            }
             break;
         }
 

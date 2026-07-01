@@ -1,18 +1,18 @@
-// test_properties.ae — property getter/setter dispatch
+// test_properties.ae — property getter/setter dispatch via struct methods
 import "std/test"
 
 struct Box {
     value: int
-}
 
-// Getter: prop with return type
-prop doubled(self: ref Box): int {
-    return self.value * 2
-}
+    // Getter: func with return type
+    func doubled(): int {
+        return self.value * 2
+    }
 
-// Setter: prop without return type
-prop doubled(self: ref Box, new_val: int) {
-    self.value = new_val / 2
+    // Setter: func without return type
+    func doubled(new_val: int) {
+        self.value = new_val / 2
+    }
 }
 
 @test

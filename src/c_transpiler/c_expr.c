@@ -620,30 +620,13 @@ static bool c_emit_prop_setter_expr(CCodegen *cg, AstNode *node) {
     }
     if (!struct_decl) return false;
     StringView field_name = field->data.ident.name;
-    /* Search struct methods */
+    /* Search struct methods for a setter (func without return type matching field name) */
     for (int mi = 0; mi < struct_decl->data.struct_decl.methods.count; mi++) {
         AstNode *method = struct_decl->data.struct_decl.methods.items[mi];
-        if (method->type == NODE_PROPERTY && method->data.func.name &&
+        if (method->type == NODE_FUNC_DECL && method->data.func.name &&
             method->data.func.name->type == NODE_IDENT &&
             method->data.func.return_type == NULL) {
             StringView mn = method->data.func.name->data.ident.name;
-            if (mn.len == field_name.len && memcmp(mn.data, field_name.data, mn.len) == 0) {
-                fprintf(cg->out, "%.*s_setter(&", (int)mn.len, mn.data);
-                c_emit_expr(cg, target);
-                fputs(", ", cg->out);
-                c_emit_expr(cg, node->data.binary.right);
-                fputc(')', cg->out);
-                return true;
-            }
-        }
-    }
-    /* Search top-level NODE_PROPERTY */
-    for (int si = 0; si < cg->program->data.list.count; si++) {
-        AstNode *d = cg->program->data.list.items[si];
-        if (d->type == NODE_PROPERTY && d->data.func.name &&
-            d->data.func.name->type == NODE_IDENT &&
-            d->data.func.return_type == NULL) {
-            StringView mn = d->data.func.name->data.ident.name;
             if (mn.len == field_name.len && memcmp(mn.data, field_name.data, mn.len) == 0) {
                 fprintf(cg->out, "%.*s_setter(&", (int)mn.len, mn.data);
                 c_emit_expr(cg, target);
@@ -1126,28 +1109,15 @@ static void c_emit_field_access(CCodegen *cg, AstNode *node) {
             }
             if (struct_decl) {
                 StringView field_name = node->data.field.field->data.ident.name;
-                /* Search struct methods first */
+                /* Search struct methods for a getter (func with return type matching field name) */
                 for (int mi = 0; mi < struct_decl->data.struct_decl.methods.count; mi++) {
                     AstNode *method = struct_decl->data.struct_decl.methods.items[mi];
-                    if (method->type == NODE_PROPERTY && method->data.func.name &&
-                        method->data.func.name->type == NODE_IDENT) {
+                    if (method->type == NODE_FUNC_DECL && method->data.func.name &&
+                        method->data.func.name->type == NODE_IDENT &&
+                        method->data.func.return_type != NULL) {
                         StringView mn = method->data.func.name->data.ident.name;
                         if (mn.len == field_name.len && memcmp(mn.data, field_name.data, mn.len) == 0) {
-                            fprintf(cg->out, "%.*s_getter(&", (int)mn.len, mn.data);
-                            c_emit_expr(cg, node->data.field.target);
-                            fputc(')', cg->out);
-                            return;
-                        }
-                    }
-                }
-                /* Then search top-level NODE_PROPERTY declarations */
-                for (int i = 0; i < cg->program->data.list.count; i++) {
-                    AstNode *d = cg->program->data.list.items[i];
-                    if (d->type == NODE_PROPERTY && d->data.func.name &&
-                        d->data.func.name->type == NODE_IDENT &&
-                        d->data.func.return_type != NULL) {
-                        StringView mn = d->data.func.name->data.ident.name;
-                        if (mn.len == field_name.len && memcmp(mn.data, field_name.data, mn.len) == 0) {
+                            /* Found a getter method — emit as function call: methodName_getter(&target) */
                             fprintf(cg->out, "%.*s_getter(&", (int)mn.len, mn.data);
                             c_emit_expr(cg, node->data.field.target);
                             fputc(')', cg->out);
