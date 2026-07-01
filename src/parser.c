@@ -566,6 +566,26 @@ AstNode *parse_func_decl(Parser *p) {
             func->data.func.name->data.ident.name.len);
         if (strncmp(fname, "op_", 3) == 0) {
             func->data.func.is_operator = true;
+
+            /* Compute signature hash: djb2 over op_<symbol> + param types */
+            uint32_t hash = 5381;
+            for (size_t si = 0; si < func->data.func.name->data.ident.name.len; si++) {
+                hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)func->data.func.name->data.ident.name.data[si]);
+            }
+            for (int pi = 0; pi < func->data.func.params.count; pi++) {
+                AstNode *param = func->data.func.params.items[pi];
+                AstNode *ptype = param->data.param.type;
+                if (ptype && ptype->type == NODE_TYPE_PRIMITIVE) {
+                    hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)ptype->data.type_node.prim);
+                } else if (ptype && ptype->type == NODE_TYPE_NAMED) {
+                    for (size_t si = 0; si < ptype->data.type_node.name.len; si++) {
+                        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)ptype->data.type_node.name.data[si]);
+                    }
+                } else {
+                    hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+                }
+            }
+            func->data.func.sig_hash = hash;
         }
     }
 
@@ -1633,6 +1653,7 @@ static Precedence token_precedence(TokenType type) {
         case TOKEN_PLUS: case TOKEN_MINUS: return PREC_TERM;
         case TOKEN_STAR: case TOKEN_SLASH: case TOKEN_PERCENT: case TOKEN_STAR_STAR: return PREC_FACTOR;
         case TOKEN_QUESTION: return PREC_TERNARY;
+        case TOKEN_UNICODE_OP: return PREC_TERM;
         default: return PREC_MIN;
     }
 }
@@ -2045,6 +2066,7 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
 
     /* Binary operators */
     BinOp op;
+    StringView custom_op = {0};
     switch (token.type) {
         case TOKEN_PLUS: op = BIN_ADD; break;
         case TOKEN_MINUS: op = BIN_SUB; break;
@@ -2073,6 +2095,10 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         case TOKEN_MINUS_EQ: op = BIN_SUB_ASSIGN; break;
         case TOKEN_STAR_EQ: op = BIN_MUL_ASSIGN; break;
         case TOKEN_SLASH_EQ: op = BIN_DIV_ASSIGN; break;
+        case TOKEN_UNICODE_OP:
+            op = BIN_CUSTOM;
+            custom_op = token.text;
+            break;
         default:
             return left; /* Not a binary op — return left unchanged */
     }
@@ -2080,7 +2106,11 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
     Precedence op_prec = token_precedence(token.type);
     parser_advance(p);
     AstNode *right = parse_expr_prec(p, op_prec);
-    return node_binary(p->arena, loc, op, left, right);
+    AstNode *result = node_binary(p->arena, loc, op, left, right);
+    if (op == BIN_CUSTOM) {
+        result->data.binary.custom_op = custom_op;
+    }
+    return result;
 }
 
 AstNode *parse_expr(Parser *p) {

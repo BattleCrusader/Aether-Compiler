@@ -1,4 +1,4 @@
-// test_op_overload.ae — operator overloading
+// test_op_overload.ae — operator overloading with explicit params
 import "std/test"
 
 struct Vector {
@@ -6,11 +6,111 @@ struct Vector {
     y: int
 }
 
-func op_add(a: int, b: int): int {
+// Operator overloads: explicit left/right params
+func op_+(a: Vector, b: Vector): Vector {
+    let result: Vector
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    return result
+}
+
+func op_-(a: Vector, b: Vector): Vector {
+    let result: Vector
+    result.x = a.x - b.x
+    result.y = a.y - b.y
+    return result
+}
+
+func op_*(a: Vector, scalar: int): Vector {
+    let result: Vector
+    result.x = a.x * scalar
+    result.y = a.y * scalar
+    return result
+}
+
+func op_==(a: Vector, b: Vector): bool {
+    return a.x == b.x and a.y == b.y
+}
+
+// Primitive operator overload — int / int becomes addition
+func op_/(a: int, b: int): int {
+    return a + b
+}
+
+// Unicode custom operator: ⌛ adds two ints
+func op_⌛(a: int, b: int): int {
     return a + b
 }
 
 @test
+func test_op_add_struct(): void {
+    let a: Vector
+    a.x = 1
+    a.y = 2
+    let b: Vector
+    b.x = 3
+    b.y = 4
+    let c: Vector = a + b
+    assertTrue(c.x == 4, "op_+ Vector: c.x == 4")
+    assertTrue(c.y == 6, "op_+ Vector: c.y == 6")
+}
+
+@test
+func test_op_sub(): void {
+    let a: Vector
+    a.x = 5
+    a.y = 7
+    let b: Vector
+    b.x = 2
+    b.y = 3
+    let c: Vector = a - b
+    assertTrue(c.x == 3, "op_-: c.x == 3")
+    assertTrue(c.y == 4, "op_-: c.y == 4")
+}
+
+@test
+func test_op_mul(): void {
+    let a: Vector
+    a.x = 2
+    a.y = 3
+    let c: Vector = a * 3
+    assertTrue(c.x == 6, "op_*: c.x == 6")
+    assertTrue(c.y == 9, "op_*: c.y == 9")
+}
+
+@test
+func test_op_eq(): void {
+    let a: Vector
+    a.x = 1
+    a.y = 2
+    let b: Vector
+    b.x = 1
+    b.y = 2
+    let c: Vector
+    c.x = 1
+    c.y = 3
+    assertTrue(a == b, "op_==: a == b")
+    assertTrue(not (a == c), "op_==: a != c")
+}
+
+@test
+func test_op_div_int(): void {
+    let result: int = 10 / 3
+    assertTrue(result == 13, "op_/ int: 10 / 3 == 13 (custom: becomes addition)")
+}
+
+@test
+func test_unicode_op(): void {
+    let result = 1 ⌛ 2
+    assertTrue(result == 3, "op_⌛: 1 ⌛ 2 == 3")
+}
+
+@test
 func main(): void {
-    assertTrue(op_add(2, 3) == 5, "op_add(2, 3) == 5")
+    test_op_add_struct()
+    test_op_sub()
+    test_op_mul()
+    test_op_eq()
+    test_op_div_int()
+    test_unicode_op()
 }

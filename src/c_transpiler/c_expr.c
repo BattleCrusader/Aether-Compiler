@@ -3,10 +3,179 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 /* ──────────────────────────────────────────────
  * Expression codegen — emit C expressions
  * ────────────────────────────────────────────── */
+
+/* ──────────────────────────────────────────────
+ * Operator overloading dispatch helpers
+ * ────────────────────────────────────────────── */
+
+/* Map a binary operator to its symbol string, or NULL if no overload exists */
+static const char *binop_to_op_symbol(BinOp op) {
+    switch (op) {
+        case BIN_ADD: return "+";
+        case BIN_SUB: return "-";
+        case BIN_MUL: return "*";
+        case BIN_DIV: return "/";
+        case BIN_MOD: return "%";
+        case BIN_EQ:  return "==";
+        case BIN_NEQ: return "!=";
+        case BIN_LT:  return "<";
+        case BIN_GT:  return ">";
+        case BIN_LE:  return "<=";
+        case BIN_GE:  return ">=";
+        case BIN_BIT_AND: return "&";
+        case BIN_BIT_OR:  return "|";
+        case BIN_BIT_XOR: return "^";
+        case BIN_SHL: return "<<";
+        case BIN_SHR: return ">>";
+        default: return NULL;
+    }
+}
+
+/* Map a unary operator to its symbol string, or NULL if no overload exists */
+static const char *unaryop_to_op_symbol(UnaryOp op) {
+    switch (op) {
+        case UNARY_NEG: return "-";
+        case UNARY_NOT: return "!";
+        case UNARY_BIT_NOT: return "~";
+        default: return NULL;
+    }
+}
+
+/* Build the full op_<symbol> name for a binary operator, e.g. "op_+" */
+static const char *binop_to_op_name(BinOp op) {
+    const char *sym = binop_to_op_symbol(op);
+    if (!sym) return NULL;
+    static char buf[32];
+    snprintf(buf, sizeof(buf), "op_%s", sym);
+    return buf;
+}
+
+/* Build the full op_<symbol> name for a unary operator, e.g. "op_-" */
+static const char *unaryop_to_op_name(UnaryOp op) {
+    const char *sym = unaryop_to_op_symbol(op);
+    if (!sym) return NULL;
+    static char buf[32];
+    snprintf(buf, sizeof(buf), "op_%s", sym);
+    return buf;
+}
+
+/* Compute the same signature hash the parser computed for an operator function.
+ * Hash = djb2 over op_<symbol> + param types + return type. */
+static uint32_t compute_op_sig_hash(const char *op_name, AstNode *left_expr, AstNode *right_expr) {
+    uint32_t hash = 5381;
+    size_t nlen = strlen(op_name);
+    for (size_t i = 0; i < nlen; i++) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)op_name[i]);
+    }
+    /* Hash left operand type */
+    if (left_expr && left_expr->type == NODE_IDENT && left_expr->data.ident.resolved) {
+        AstNode *decl = left_expr->data.ident.resolved;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
+            hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.prim);
+        } else if (type_node && type_node->type == NODE_TYPE_NAMED) {
+            for (size_t i = 0; i < type_node->data.type_node.name.len; i++) {
+                hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.name.data[i]);
+            }
+        } else {
+            hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+        }
+    } else if (left_expr && left_expr->type == NODE_LITERAL_INT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_I64);
+    } else if (left_expr && left_expr->type == NODE_LITERAL_FLOAT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_F64);
+    } else {
+        hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+    }
+    /* Hash right operand type */
+    if (right_expr && right_expr->type == NODE_IDENT && right_expr->data.ident.resolved) {
+        AstNode *decl = right_expr->data.ident.resolved;
+        AstNode *type_node = NULL;
+        if (decl->type == NODE_LET) type_node = decl->data.let_decl.type;
+        else if (decl->type == NODE_PARAM) type_node = decl->data.param.type;
+        if (type_node && type_node->type == NODE_TYPE_PRIMITIVE) {
+            hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.prim);
+        } else if (type_node && type_node->type == NODE_TYPE_NAMED) {
+            for (size_t i = 0; i < type_node->data.type_node.name.len; i++) {
+                hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)type_node->data.type_node.name.data[i]);
+            }
+        } else {
+            hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+        }
+    } else if (right_expr && right_expr->type == NODE_LITERAL_INT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_I64);
+    } else if (right_expr && right_expr->type == NODE_LITERAL_FLOAT) {
+        hash = (uint32_t)(((hash << 5) + hash) + (unsigned char)PRIM_F64);
+    } else {
+        hash = (uint32_t)(((hash << 5) + hash) + 0xFF);
+    }
+    return hash;
+}
+
+/* Search the program for an operator overload function matching the given name and signature hash.
+ * Returns the function node if found, NULL otherwise. */
+static AstNode *find_op_func_by_sig(AstNode *program, const char *op_name, uint32_t sig_hash) {
+    if (!program || program->type != NODE_PROGRAM) return NULL;
+    size_t nlen = strlen(op_name);
+    for (int i = 0; i < program->data.list.count; i++) {
+        AstNode *decl = program->data.list.items[i];
+        if (decl->type == NODE_FUNC_DECL && decl->data.func.is_operator &&
+            decl->data.func.name && decl->data.func.name->type == NODE_IDENT) {
+            StringView dn = decl->data.func.name->data.ident.name;
+            if (dn.len == nlen && memcmp(dn.data, op_name, nlen) == 0 &&
+                decl->data.func.sig_hash == sig_hash) {
+                return decl;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Mangle an operator symbol + signature hash into a C-safe function name.
+ * e.g. op_+(int,int) → op_plus_1a2b3c4d
+ * Returns a pointer to a static buffer. */
+static const char *mangle_op_sig(const char *op_name, uint32_t sig_hash) {
+    static char buf[64];
+    int pos = 0;
+    /* Mangle the symbol part */
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "op_");
+    for (const char *p = op_name + 3; *p && pos < (int)sizeof(buf) - 12; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (isalnum(c) || c == '_') {
+            buf[pos++] = (char)c;
+        } else if (c >= 128) {
+            uint32_t cp = 0;
+            if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } }
+            else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } }
+            else if ((c & 0xF8) == 0xF0) { cp = c & 0x07; if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } if (*(p+1)) { p++; cp = (cp << 6) | ((unsigned char)*p & 0x3F); } }
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "u%04X", (unsigned)cp);
+        } else if (c == '+') { memcpy(buf + pos, "plus", 4); pos += 4; }
+        else if (c == '-') { memcpy(buf + pos, "minus", 5); pos += 5; }
+        else if (c == '*') { memcpy(buf + pos, "star", 4); pos += 4; }
+        else if (c == '/') { memcpy(buf + pos, "slash", 5); pos += 5; }
+        else if (c == '%') { memcpy(buf + pos, "percent", 7); pos += 7; }
+        else if (c == '=') { memcpy(buf + pos, "eq", 2); pos += 2; }
+        else if (c == '!') { memcpy(buf + pos, "bang", 4); pos += 4; }
+        else if (c == '<') { memcpy(buf + pos, "lt", 2); pos += 2; }
+        else if (c == '>') { memcpy(buf + pos, "gt", 2); pos += 2; }
+        else if (c == '&') { memcpy(buf + pos, "amp", 3); pos += 3; }
+        else if (c == '|') { memcpy(buf + pos, "pipe", 4); pos += 4; }
+        else if (c == '^') { memcpy(buf + pos, "caret", 5); pos += 5; }
+        else if (c == '~') { memcpy(buf + pos, "tilde", 5); pos += 5; }
+        else { buf[pos++] = '_'; }
+    }
+    /* Append hash suffix */
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "_%08x", (unsigned)sig_hash);
+    buf[pos] = '\0';
+    return buf;
+}
 
 static void c_emit_literal_int(CCodegen *cg, AstNode *node) {
     uint64_t val = node->data.literal.int_val;
@@ -210,6 +379,49 @@ static int is_var_string_type(CCodegen *cg, StringView vname) {
 }
 
 static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
+    /* Operator overloading dispatch: look up op_<symbol> by signature hash.
+       Works for all types (primitives, structs, etc.) with proper overloading. */
+    {
+        const char *op_name = binop_to_op_name(node->data.binary.op);
+        if (op_name) {
+            AstNode *left = node->data.binary.left;
+            AstNode *right = node->data.binary.right;
+            uint32_t sig_hash = compute_op_sig_hash(op_name, left, right);
+            AstNode *op_func = find_op_func_by_sig(cg->program, op_name, sig_hash);
+            if (op_func) {
+                const char *mangled = mangle_op_sig(op_name, sig_hash);
+                fputs(mangled, cg->out);
+                fputc('(', cg->out);
+                c_emit_expr(cg, left);
+                fputs(", ", cg->out);
+                c_emit_expr(cg, right);
+                fputc(')', cg->out);
+                return;
+            }
+        }
+    }
+
+    /* BIN_CUSTOM: custom operator (unicode symbol like ⌛) — emit as op_<symbol>(left, right) */
+    if (node->data.binary.op == BIN_CUSTOM) {
+        char sym_buf[64];
+        size_t sym_len = node->data.binary.custom_op.len;
+        if (sym_len > 63) sym_len = 63;
+        memcpy(sym_buf, node->data.binary.custom_op.data, sym_len);
+        sym_buf[sym_len] = '\0';
+        /* Build op_<symbol> name and compute hash */
+        char op_name[64];
+        snprintf(op_name, sizeof(op_name), "op_%s", sym_buf);
+        uint32_t sig_hash = compute_op_sig_hash(op_name, node->data.binary.left, node->data.binary.right);
+        const char *mangled = mangle_op_sig(op_name, sig_hash);
+        fputs(mangled, cg->out);
+        fputc('(', cg->out);
+        c_emit_expr(cg, node->data.binary.left);
+        fputs(", ", cg->out);
+        c_emit_expr(cg, node->data.binary.right);
+        fputc(')', cg->out);
+        return;
+    }
+
     /* BIN_ADD is overloaded: numeric add vs string concat vs slice concat. */
     if (node->data.binary.op == BIN_ADD) {
         AstNode *left = node->data.binary.left;
@@ -365,6 +577,24 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
 }
 
 static void c_emit_unary_op(CCodegen *cg, AstNode *node) {
+    /* Operator overloading dispatch: look up op_<symbol> by signature hash. */
+    {
+        const char *op_name = unaryop_to_op_name(node->data.unary.op);
+        if (op_name) {
+            AstNode *operand = node->data.unary.operand;
+            uint32_t sig_hash = compute_op_sig_hash(op_name, operand, NULL);
+            AstNode *op_func = find_op_func_by_sig(cg->program, op_name, sig_hash);
+            if (op_func) {
+                const char *mangled = mangle_op_sig(op_name, sig_hash);
+                fputs(mangled, cg->out);
+                fputc('(', cg->out);
+                c_emit_expr(cg, operand);
+                fputc(')', cg->out);
+                return;
+            }
+        }
+    }
+
     switch (node->data.unary.op) {
         case UNARY_NEG:
             fputs("(-(", cg->out);
@@ -539,7 +769,26 @@ static void c_emit_call(CCodegen *cg, AstNode *node) {
     if (func_decl && func_decl->data.func.is_sys) {
         fputs("__aether_sys_", cg->out);
     }
-    fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
+    /* Mangle operator overload function names (op_+ → op_plus_<hash>, etc.) */
+    if (fname.len >= 3 && memcmp(fname.data, "op_", 3) == 0) {
+        char op_name[64];
+        size_t nlen = fname.len;
+        if (nlen > 63) nlen = 63;
+        memcpy(op_name, fname.data, nlen);
+        op_name[nlen] = '\0';
+        /* Compute hash from the function's own sig_hash (stored in func_decl) */
+        uint32_t sig_hash = 0;
+        if (func_decl && func_decl->data.func.is_operator) {
+            sig_hash = func_decl->data.func.sig_hash;
+        } else {
+            sig_hash = compute_op_sig_hash(op_name, NULL, NULL);
+        }
+        const char *mangled = mangle_op_sig(op_name, sig_hash);
+        fputs(mangled, cg->out);
+        fputc('(', cg->out);
+    } else {
+        fprintf(cg->out, "%.*s(", (int)fname.len, fname.data);
+    }
 
     /* Emit arguments, filling in defaults for omitted optional params */
 

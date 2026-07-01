@@ -111,6 +111,7 @@ typedef enum {
     BIN_CONCAT,  /* string concatenation */
     BIN_OR_ELSE, /* optional unwrap: x or default */
     BIN_POWER,   /* ** power operator */
+    BIN_CUSTOM,  /* custom operator (unicode symbol like ⌛) */
 } BinOp;
 
 /* ================================================================
@@ -184,6 +185,7 @@ typedef struct {
     AstNodeList post_conditions; /* post(expr) contract expressions */
     /* @test — test annotation */
     bool has_test;            /* true if @test attribute is set */
+    uint32_t sig_hash;        /* hash of param+return types for operator overload disambiguation */
 } FuncDecl;
 
 /* Parameter */
@@ -251,6 +253,7 @@ typedef struct {
     BinOp op;
     AstNode *left;
     AstNode *right;
+    StringView custom_op;   /* for BIN_CUSTOM: the operator symbol text (e.g. "⌛") */
 } BinaryOpNode;
 
 /* Unary operation */

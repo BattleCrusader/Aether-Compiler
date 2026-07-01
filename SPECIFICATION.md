@@ -1171,26 +1171,72 @@ t.fahrenheit = 32    // calls setter → celsius = 0
 
 ### 9.7 Operator Overloading
 
+Operators can be overloaded by defining a function named `op_` followed by the operator symbol. The `op_` prefix is reserved — it can only be used for operator overloading. The symbol can be any sequence of characters (including unicode), making custom operators possible.
+
+Operator overloads use explicit left/right parameters (C++ style):
+
 ```aether
 struct Vector2 {
     x: f64
     y: f64
 }
 
-impl Vector2 {
-    func op_add( other: Vector2): Vector2 {
-        return Vector2 { x: self.x + other.x, y: self.y + other.y }
-    }
-
-    func op_mul( scalar: f64): Vector2 {
-        return Vector2 { x: self.x * scalar, y: self.y * scalar }
-    }
+func op_+(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    return result
 }
 
-let a = Vector2 { x: 1, y: 2 }
-let b = Vector2 { x: 3, y: 4 }
-let c = a + b          // calls op_add
-let d = a * 2.0        // calls op_mul
+func op_*(a: Vector2, scalar: f64): Vector2 {
+    let result: Vector2
+    result.x = a.x * scalar
+    result.y = a.y * scalar
+    return result
+}
+
+let a: Vector2
+a.x = 1
+a.y = 2
+let b: Vector2
+b.x = 3
+b.y = 4
+let c: Vector2 = a + b  // calls op_+(a, b)
+let d: Vector2 = a * 2.0  // calls op_*(a, 2.0)
+```
+
+**Supported operator overloads:**
+
+| Operator | Function name | Type |
+|----------|--------------|------|
+| `+` | `op_+` | Binary |
+| `-` | `op_-` | Binary |
+| `*` | `op_*` | Binary |
+| `/` | `op_/` | Binary |
+| `%` | `op_%` | Binary |
+| `==` | `op_==` | Binary |
+| `!=` | `op_!=` | Binary |
+| `<` | `op_<` | Binary |
+| `>` | `op_>` | Binary |
+| `<=` | `op_<=` | Binary |
+| `>=` | `op_>=` | Binary |
+| `&` | `op_&` | Binary |
+| `\|` | `op_\|` | Binary |
+| `^` | `op_^` | Binary |
+| `<<` | `op_<<` | Binary |
+| `>>` | `op_>>` | Binary |
+| `-` (unary) | `op_-` | Unary |
+| `!` (unary) | `op_!` | Unary |
+| `~` (unary) | `op_~` | Unary |
+
+**Custom operators:** Any unicode symbol can be used as a custom operator with infix syntax:
+
+```aether
+func op_⌛(a: int, b: int): int {
+    return a + b
+}
+
+let result = 1 ⌛ 2  // calls op_⌛(1, 2)
 ```
 
 ---
@@ -1600,32 +1646,37 @@ t.fahrenheit = 32    // calls setter → celsius = 0
 
 ### 15.2 Operator Overloading
 
+Operator overloads use explicit left/right parameters (C++ style). The `op_` prefix is reserved — it can only be used for operator overloading.
+
 ```aether
 struct Vector2 {
     x: f64
     y: f64
 }
 
-impl Vector2 {
-    func op_add( other: Vector2): Vector2 {
-        return Vector2 { x: self.x + other.x, y: self.y + other.y }
-    }
+func op_+(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x + b.x
+    result.y = a.y + b.y
+    return result
+}
 
-    func op_sub( other: Vector2): Vector2 {
-        return Vector2 { x: self.x - other.x, y: self.y - other.y }
-    }
+func op_-(a: Vector2, b: Vector2): Vector2 {
+    let result: Vector2
+    result.x = a.x - b.x
+    result.y = a.y - b.y
+    return result
+}
 
-    func op_mul( scalar: f64): Vector2 {
-        return Vector2 { x: self.x * scalar, y: self.y * scalar }
-    }
+func op_*(a: Vector2, scalar: f64): Vector2 {
+    let result: Vector2
+    result.x = a.x * scalar
+    result.y = a.y * scalar
+    return result
+}
 
-    func op_neg(): Vector2 {
-        return Vector2 { x: -self.x, y: -self.y }
-    }
-
-    func op_eq( other: Vector2): bool {
-        return self.x == other.x and self.y == other.y
-    }
+func op_==(a: Vector2, b: Vector2): bool {
+    return a.x == b.x and a.y == b.y
 }
 ```
 
