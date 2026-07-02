@@ -218,7 +218,55 @@ TEST_FIXTURES = \
 	tests/fixtures/test_spec_23_compiler_targets.ae \
 	tests/fixtures/test_spec_24_future_features.ae \
 	tests/fixtures/test_spec_25_concurrency_fibers.ae \
-	tests/fixtures/test_spec_26_module_system.ae
+	tests/fixtures/test_spec_26_module_system.ae \
+	tests/fixtures/test_variables.ae \
+	tests/fixtures/test_unsafe.ae \
+	tests/fixtures/test_trycatch_nested.ae \
+	tests/fixtures/test_trycatch_finally.ae \
+	tests/fixtures/test_trycatch_finally_throw.ae \
+	tests/fixtures/test_trycatch_catch_var.ae \
+	tests/fixtures/test_top_level_asm.ae \
+	tests/fixtures/test_str.ae \
+	tests/fixtures/test_serial.ae \
+	tests/fixtures/test_properties_full.ae \
+	tests/fixtures/test_or_else.ae \
+	tests/fixtures/test_oop.ae \
+	tests/fixtures/test_memory_management.ae \
+	tests/fixtures/test_mem.ae \
+	tests/fixtures/test_match_range.ae \
+	tests/fixtures/test_lib.ae \
+	tests/fixtures/test_io.ae \
+	tests/fixtures/test_functions.ae \
+	tests/fixtures/test_fs.ae \
+	tests/fixtures/test_for_index.ae \
+	tests/fixtures/test_fixtures.ae \
+	tests/fixtures/test_error_handling.ae \
+	tests/fixtures/test_control_flow.ae \
+	tests/fixtures/test_collections.ae \
+	tests/fixtures/test_closure_full.ae \
+	tests/fixtures/test_comptime_full.ae \
+	tests/fixtures/test_contract_full.ae \
+	tests/fixtures/test_dyn_full.ae \
+	tests/fixtures/test_heap.ae \
+	tests/fixtures/test_kernel.ae \
+	tests/fixtures/test_kernellayout.ae \
+	tests/fixtures/test_method.ae \
+	tests/fixtures/test_pool_decl.ae \
+	tests/fixtures/test_pool_minimal.ae \
+	tests/fixtures/test_protocol_decl.ae \
+	tests/fixtures/test_ref_types.ae \
+	tests/fixtures/test_array_literal.ae \
+	tests/fixtures/test_binary_target.ae \
+	tests/fixtures/test_boot_target.ae \
+	tests/fixtures/test_bootsector.ae \
+	tests/fixtures/test_catch_all.ae \
+	tests/fixtures/test_class.ae \
+	tests/fixtures/test_default_param.ae \
+	tests/fixtures/test_elf.ae \
+	tests/fixtures/test_module_target.ae \
+	tests/fixtures/test_access.ae \
+	tests/fixtures/test_arch.ae \
+	tests/fixtures/test_asm.ae
 
 # .aelib library fixtures — must be built before test-host
 AELIB_FIXTURES = \
