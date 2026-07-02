@@ -2108,6 +2108,18 @@ static AstNode *parse_infix(Parser *p, AstNode *left, Precedence left_prec) {
         return cast_node;
     }
 
+    /* Error context: throws_call ? "message" — ? followed by string literal */
+    if (token.type == TOKEN_QUESTION) {
+        /* Peek ahead: if next token is a string literal, it's error context */
+        Token peek = lexer_peek_next(p->lexer);
+        if (peek.type == TOKEN_STRING_LITERAL) {
+            parser_advance(p);
+            AstNode *right = parse_expr_prec(p, PREC_TERNARY);
+            AstNode *node = node_binary(p->arena, loc, BIN_ERROR_CONTEXT, left, right);
+            return node;
+        }
+    }
+
     /* Ternary: left ? middle : right */
     if (token.type == TOKEN_QUESTION) {
         parser_advance(p);

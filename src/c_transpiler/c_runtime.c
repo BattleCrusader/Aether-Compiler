@@ -79,6 +79,7 @@ void c_emit_runtime(CCodegen *cg) {
     fputs("int __aether_error_tag = 0;\n", cg->out);
     fputs("uint64_t __aether_error_value = 0;\n", cg->out);
     fputs("jmp_buf __aether_jmp_buf;\n\n", cg->out);
+    fputs("string __aether_error_msg = {0, NULL};\n\n", cg->out);
 
     /* Emit RC retain/release helpers */
     fputs("static void __aether_rc_retain(void *ptr) {\n", cg->out);

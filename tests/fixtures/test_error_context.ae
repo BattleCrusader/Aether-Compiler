@@ -1,0 +1,37 @@
+// test_error_context.ae — Tests for SPECIFICATION.md §24.9
+// Zero-cost error context operator: throws_call ? "context message"
+//
+// The ? operator attaches context to errors. In debug builds the
+// context message is preserved; in release builds only the error
+// discriminant remains (zero-cost).
+
+import "std/test"
+
+// ── Helper: a throws function ──────────────────────────────────
+
+func mayFail(shouldFail: bool): u64 throws {
+    if shouldFail {
+        throw 42
+    }
+    return 100
+}
+
+// ── Test: error context with ? operator ───────────────────────
+
+@test
+func test_error_context_compiles(): u64 {
+    // The ? operator wraps a throws call with context.
+    // On host, the context is stored in __aether_error_msg.
+    // We test that the syntax compiles and doesn't crash.
+    let result = mayFail(false) ? "should not fail"
+    assertEquals(100, result, "error context should pass through value")
+    return 0
+}
+
+@test
+func test_error_context_syntax(): u64 {
+    // Verify the ? operator works with a string literal
+    let val = mayFail(false) ? "context message"
+    assertEquals(100, val, "? operator should not affect success path")
+    return 0
+}

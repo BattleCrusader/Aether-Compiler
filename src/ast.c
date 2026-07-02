@@ -429,7 +429,10 @@ const char *binop_name(BinOp op) {
         case BIN_SUB_ASSIGN: return "-="; case BIN_MUL_ASSIGN: return "*="; case BIN_DIV_ASSIGN: return "/=";
         case BIN_RANGE: return ".."; case BIN_RANGE_INCLUSIVE: return "..=";
         case BIN_CONCAT: return "++";
+        case BIN_OR_ELSE: return "or";
         case BIN_POWER: return "**";
+        case BIN_CUSTOM: return "custom";
+        case BIN_ERROR_CONTEXT: return "?";
     }
     return "?";
 }

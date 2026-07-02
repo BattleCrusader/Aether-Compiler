@@ -115,6 +115,7 @@ typedef enum {
     BIN_OR_ELSE, /* optional unwrap: x or default */
     BIN_POWER,   /* ** power operator */
     BIN_CUSTOM,  /* custom operator (unicode symbol like ⌛) */
+    BIN_ERROR_CONTEXT, /* error context: throws_call ? "message" */
 } BinOp;
 
 /* ================================================================
