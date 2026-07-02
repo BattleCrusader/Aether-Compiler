@@ -1,8 +1,8 @@
 # Aether Compiler — Development Plan
 
-> **Current branch:** `feature/P39.00-concurrency-spawn`
+> **Current branch:** `feature/P40.00-error-context-operator`
 > **Last updated:** 2026-07-02
-> **Status:** All 39 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. All 86 test fixtures wired into Makefile.
+> **Status:** All 40 phases complete. C transpiler is the default backend. 54/54 host-native tests pass. All 87 test fixtures wired into Makefile.
 
 ---
 
@@ -21,6 +21,7 @@
 | 37 | Debug vs release contract elimination — pre/post/contract skipped at -O2+ | ✅ Complete |
 | 38 | Compile-time reflection — #run emit(), target_arch() | ✅ Complete |
 | 39 | Concurrency — spawn, yield keywords | ✅ Complete |
+| 40 | Zero-cost error context — ? operator for throws calls | ✅ Complete |
 
 ---
 

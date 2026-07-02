@@ -13,7 +13,7 @@
 - **Test**: `make test` (unit) + `make test-host` (native .ae fixtures)
 - **Install**: `sudo make install` or `make install-local`
 - **Source**: `/Volumes/Backup/Development/Project_Aether/compiler/`
-- **Branch**: `feature/P39.00-concurrency-spawn` (active development)
+- **Branch**: `feature/P40.00-error-context-operator` (active development)
 
 ---
 

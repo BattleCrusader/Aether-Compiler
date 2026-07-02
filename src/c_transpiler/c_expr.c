@@ -532,6 +532,19 @@ static void c_emit_binary_op(CCodegen *cg, AstNode *node) {
         return;
     }
 
+    /* BIN_ERROR_CONTEXT: throws_call ? "context message"
+       Wraps the call in a compound expression that stores the context
+       message before propagating the error. */
+    if (node->data.binary.op == BIN_ERROR_CONTEXT) {
+        /* Emit: ({ __aether_error_msg = context_string; left; }) */
+        fputs("({ __aether_error_msg = ", cg->out);
+        c_emit_expr(cg, node->data.binary.right);
+        fputs("; ", cg->out);
+        c_emit_expr(cg, node->data.binary.left);
+        fputs("; })", cg->out);
+        return;
+    }
+
     /* String comparison needs __aether_string_eq */
     if (node->data.binary.op == BIN_EQ &&
         (is_string_expr(node->data.binary.left) || is_string_expr(node->data.binary.right))) {
